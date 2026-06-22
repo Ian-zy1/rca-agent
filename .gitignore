@@ -1,6 +1,3 @@
-# Project tracking (local only)
-.project/
-
 # macOS
 .DS_Store
 
