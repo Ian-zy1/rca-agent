@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCA 智能体控制台 · 根因分析演示</title>
+<style>
+  :root{
+    --bg:#0b1220; --bg-2:#0f172a; --card:#1e293b; --card-2:#172033;
+    --border:#334155; --text:#e2e8f0; --text-dim:#94a3b8;
+    --blue:#3b82f6; --cyan:#06b6d4; --green:#10b981; --amber:#f59e0b;
+    --red:#ef4444; --purple:#8b5cf6;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;
+  }
+  /* Top bar */
+  .topbar{
+    background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);
+    border-bottom:1px solid var(--border);padding:14px 24px;
+    display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand-logo{width:36px;height:36px;background:linear-gradient(135deg,var(--blue),var(--cyan));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+  .brand h1{font-size:17px;font-weight:600}
+  .brand small{display:block;color:var(--text-dim);font-size:11px;font-weight:400;margin-top:1px}
+  .scene-tabs{display:flex;gap:8px}
+  .scene-tab{
+    background:var(--card);border:1px solid var(--border);color:var(--text-dim);
+    padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:all .2s;
+  }
+  .scene-tab:hover{border-color:var(--blue);color:var(--text)}
+  .scene-tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
+  /* Layout */
+  .main-grid{display:grid;grid-template-columns:320px 1fr 420px;gap:16px;padding:16px;height:calc(100vh - 67px)}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
+  .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card-2)}
+  .panel-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .panel-body{flex:1;overflow-y:auto;padding:12px}
+  /* Alert list */
+  .alert-item{
+    background:var(--card-2);border:1px solid var(--border);border-left:3px solid var(--red);
+    border-radius:6px;padding:12px;margin-bottom:10px;cursor:pointer;transition:all .2s;
+  }
+  .alert-item:hover{border-color:var(--blue);transform:translateX(2px)}
+  .alert-item.firing{border-left-color:var(--red);animation:pulseRed 2s infinite}
+  @keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 12px 0 rgba(239,68,68,.3)}}
+  .alert-name{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+  .alert-meta{font-size:11px;color:var(--text-dim);display:flex;flex-wrap:wrap;gap:8px}
+  .badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600}
+  .badge-critical{background:rgba(239,68,68,.15);color:#fca5a5}
+  .badge-warning{background:rgba(245,158,11,.15);color:#fcd34d}
+  .badge-layer{background:rgba(139,92,246,.15);color:#c4b5fd}
+  .trigger-btn{
+    width:100%;background:linear-gradient(135deg,var(--blue),var(--cyan));border:none;color:#fff;
+    padding:10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-top:10px;transition:all .2s;
+  }
+  .trigger-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,.4)}
+  .trigger-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  /* Workflow */
+  .workflow-step{
+    background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;
+    transition:all .3s;opacity:.5;
+  }
+  .workflow-step.active{opacity:1;border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.2)}
+  .workflow-step.done{opacity:1;border-color:var(--green)}
+  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .step-num{
+    width:24px;height:24px;border-radius:50%;background:var(--border);color:var(--text-dim);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;
+  }
+  .workflow-step.active .step-num{background:var(--blue);color:#fff}
+  .workflow-step.done .step-num{background:var(--green);color:#fff}
+  .step-name{font-size:13px;font-weight:500;flex:1}
+  .step-status{font-size:11px;color:var(--text-dim)}
+  .workflow-step.active .step-status{color:var(--blue)}
+  .workflow-step.done .step-status{color:var(--green)}
+  .step-detail{
+    font-size:11px;color:var(--text-dim);background:var(--bg);border-radius:5px;padding:8px;margin-top:6px;
+    font-family:"SF Mono",Consolas,Monaco,monospace;white-space:pre-wrap;max-height:0;overflow:hidden;transition:max-height .3s;
+  }
+  .workflow-step.done .step-detail{max-height:300px;overflow-y:auto}
+  .step-detail .hl-k{color:#7dd3fc}
+  .step-detail .hl-v{color:#86efac}
+  .step-detail .hl-w{color:#fcd34d}
+  .step-detail .hl-e{color:#fca5a5}
+  /* Report */
+  .report-empty{color:var(--text-dim);text-align:center;padding:40px 20px;font-size:12px}
+  .report-card{background:var(--card-2);border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid var(--border)}
+  .report-summary{font-size:15px;font-weight:600;margin-bottom:10px;line-height:1.5}
+  .report-section-title{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px}
+  .report-list{list-style:none;padding-left:0}
+  .report-list li{font-size:12px;padding:4px 0 4px 16px;position:relative;line-height:1.5}
+  .report-list li::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:var(--blue)}
+  .confidence-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:6px}
+  .confidence-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:3px;transition:width 1s}
+  .grafana-link{
+    display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);
+    color:#fcd34d;padding:5px 10px;border-radius:5px;font-size:11px;text-decoration:none;margin:3px;transition:all .2s;
+  }
+  .grafana-link:hover{background:rgba(245,158,11,.2)}
+  .rec-item{
+    background:rgba(16,185,129,.08);border-left:2px solid var(--green);padding:8px 10px;
+    border-radius:4px;margin-bottom:6px;font-size:12px;line-height:1.5;
+  }
+  /* Chat */
+  .chat-bar{
+    border-top:1px solid var(--border);padding:10px;background:var(--card-2);
+    display:flex;gap:8px;
+  }
+  .chat-input{
+    flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:9px 12px;border-radius:6px;font-size:12px;outline:none;
+  }
+  .chat-input:focus{border-color:var(--blue)}
+  .chat-btn{
+    background:var(--blue);border:none;color:#fff;padding:9px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;
+  }
+  /* Misc */
+  .empty-state{text-align:center;color:var(--text-dim);padding:30px 10px;font-size:12px}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:#475569}
+  .pill{display:inline-block;padding:2px 6px;background:var(--border);border-radius:3px;font-size:10px;color:var(--text-dim);margin-left:4px}
+  .json{font-family:"SF Mono",Consolas,Monaco,monospace;font-size:11px;white-space:pre-wrap;color:var(--text-dim)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">R</div>
+    <div>
+      <h1>RCA 智能体控制台 <span class="pill" style="background:rgba(16,185,129,.15);color:#6ee7b7">L3 智能级</span></h1>
+      <small>基于 LangGraph + LLM 的运维根因分析 · IaaS/PaaS/SaaS/容器 全覆盖</small>
+    </div>
+  </div>
+  <div class="scene-tabs">
+    <div class="scene-tab active" data-scene="0">场景1: 容器OOM</div>
+    <div class="scene-tab" data-scene="1">场景2: 节点宕机</div>
+    <div class="scene-tab" data-scene="2">场景3: 慢查询超时</div>
+  </div>
+</div>
+
+<div class="main-grid">
+  <!-- LEFT: Alert list -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🔔 告警列表</div>
+      <span class="badge badge-critical" id="alertCount">3 firing</span>
+    </div>
+    <div class="panel-body" id="alertList"></div>
+  </div>
+
+  <!-- CENTER: Workflow -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">⚙️ RCA 推理工作流</div>
+      <span class="step-status" id="wfStatus">等待触发</span>
+    </div>
+    <div class="panel-body" id="workflowList">
+      <div class="empty-state">点击左侧告警或触发按钮<br>启动 RCA 推理流程</div>
+    </div>
+    <div class="chat-bar">
+      <input class="chat-input" id="chatInput" placeholder="或输入问题,如:为什么 order-service 超时?" />
+      <button class="chat-btn" id="chatBtn">对话查询</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Report -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">📄 RCA 报告</div>
+      <span class="step-status" id="reportTime"></span>
+    </div>
+    <div class="panel-body" id="reportArea">
+      <div class="report-empty">报告将在 RCA 流程完成后显示</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ Scene Data ============
+const SCENES = [
+  {
+    id:'oom', name:'容器OOM',
+    alerts:[
+      {name:'PodOOMKilled', service:'order-service', resource:'order-service-7d9c-x4k2', layer:'container', severity:'critical',
+       summary:'Pod was OOMKilled, container reached memory limit 512Mi', startsAt:'2025-06-22 10:30:12'},
+      {name:'HighMemoryPressure', service:'node-01', resource:'node-01', layer:'iaas', severity:'warning',
+       summary:'Node memory usage above 90%', startsAt:'2025-06-22 10:29:50'}
+    ],
+    steps:[
+      {name:'告警接收', detail:'<span class="hl-k">Webhook 接收</span> Alertmanager 事件\n收到 <span class="hl-w">2</span> 条告警:\n  ├─ <span class="hl-e">PodOOMKilled</span> / order-service / critical\n  └─ <span class="hl-w">HighMemoryPressure</span> / node-01 / warning'},
+      {name:'告警聚合', detail:'<span class="hl-k">按事件分组</span>: 同一故障源关联\n事件 <span class="hl-v">INC-20250622-001</span>:\n  时间窗口: 10:29:50 ~ 10:30:12 (<span class="hl-w">22s</span>)\n  关联服务: order-service, node-01\n  判定: <span class="hl-v">同一根因事件</span>'},
+      {name:'拓扑关联', detail:'<span class="hl-k">查询 topology.yaml</span>\norder-service (saas/deploy)\n  └─ 调度于 node-01 (iaas)\n     └─ 同节点还有: redis-cache, nginx-ingress\n受影响范围: <span class="hl-w">3 个 Pod</span> / <span class="hl-w">2 个服务</span>'},
+      {name:'指标分析', detail:'<span class="hl-k">Prometheus 查询</span>\nnode-01:\n  memory_usage = <span class="hl-e">94.2%</span> (阈值 85%)\norder-service:\n  memory_rss = <span class="hl-e">510Mi</span> / limit 512Mi\n  restart_count = <span class="hl-w">7</span> (1h内)\n  gc_time = <span class="hl-w">38%</span> (Full GC频繁)'},
+      {name:'日志分析', detail:'<span class="hl-k">Loki 查询</span> {service="order-service"} |= "ERROR"\n最新日志:\n  <span class="hl-e">java.lang.OutOfMemoryError: Java heap space</span>\n  <span class="hl-e">  at com.app.OrderService.process(OrderService.java:142)</span>\n  <span class="hl-e">  at java.util.HashMap.resize(HashMap.java:704)</span>\n特征: 内存分配失败,HashMap 扩容触发'},
+      {name:'历史案例检索', detail:'<span class="hl-k">Chroma 向量检索</span> Top-3\n匹配 #1 (相似度 <span class="hl-v">0.92</span>):\n  <span class="hl-v">INC-20250315-内存泄漏</span>\n  症状: OOM + Full GC + restart\n  处置: 升级 limit + 排查 HashMap 缓存\n匹配 #2 (0.78): INC-20250401-连接池泄漏'},
+      {name:'根因推断', detail:'<span class="hl-k">LLM 综合推理 (DeepSeek-V3)</span>\n<span class="hl-v">根因假设 (置信度 0.91):</span>\norder-service 存在<span class="hl-w">内存泄漏</span>:\n1. Rss 接近 limit,Full GC 占 38% → 内存无法回收\n2. OutOfMemoryError 出现在 HashMap.resize → 堆积未释放对象\n3. 7 次 OOMRestart 在 1h 内 → 临时重启无效\n4. 历史案例 #20250315 高度相似(0.92)'},
+      {name:'报告生成', detail:'<span class="hl-k">生成结构化报告</span>\n  summary: "应用内存泄漏致 OOM,临时重启无效"\n  confidence: <span class="hl-v">0.91</span>\n  recommendations: <span class="hl-v">3 条</span>\n  grafana_links: <span class="hl-v">2 条</span>\n<span class="hl-v">✓ 报告已生成,耗时 28.4s</span>'}
+    ],
+    report:{
+      summary:'order-service 存在内存泄漏,1小时内 7 次 OOMKilled,临时重启无法解决',
+      severity:'P1 严重',
+      affected:['order-service-7d9c-x4k2 (Pod)','node-01 (Node)','redis-cache (受影响:同节点)'],
+      rootCause:'应用 OrderService.process() 存在内存泄漏:HashMap 缓存未设置上限,对象持续堆积无法被 GC 回收,最终触发 java.lang.OutOfMemoryError。Full GC 占 CPU 38% 但无法释放内存,7 次自动重启均未解决。',
+      confidence:91,
+      evidence:{'指标':'node-01 内存 94.2%;Pod rss 510/512Mi;Full GC 38%','日志':'OutOfMemoryError: Java heap space @ OrderService.process:142','历史':'匹配 INC-20250315 内存泄漏案例 (0.92)'},
+      recommendations:[
+        '【紧急】提升 order-service memory limit 至 1Gi,避免持续 OOM 影响业务',
+        '【短期】在 OrderService 中为 HashMap 设置最大容量(LRU Cache),或引入 Caffeine 缓存',
+        '【中期】接入 APM(如 SkyWalking),监控 JVM 堆内存趋势,设置 GC 预警阈值'
+      ],
+      grafana:[
+        {label:'Pod 内存趋势', url:'http://grafana.local/d/pods?from=now-1h&to=now&var-pod=order-service-7d9c-x4k2'},
+        {label:'Node 资源概览', url:'http://grafana.local/d/nodes?from=now-1h&to=now&var-node=node-01'}
+      ]
+    }
+  },
+  {
+    id:'nodedown', name:'节点宕机',
+    alerts:[
+      {name:'NodeDown', service:'k8s-cluster', resource:'node-02', layer:'iaas', severity:'critical',
+       summary:'node-02 has been unreachable for 5m', startsAt:'2025-06-22 11:15:00'},
+      {name:'PodPending', service:'order-service', resource:'order-service-7d9c-x5k3', layer:'container', severity:'warning',
+       summary:'Pod stuck in Pending state', startsAt:'2025-06-22 11:16:30'},
+      {name:'PodPending', service:'payment-service', resource:'payment-service-3f2a-r8m1', layer:'container', severity:'warning',
+       summary:'Pod stuck in Pending state', startsAt:'2025-06-22 11:16:32'}
+    ],
+    steps:[
+      {name:'告警接收', detail:'<span class="hl-k">Webhook 接收</span>\n收到 <span class="hl-w">3</span> 条告警:\n  ├─ <span class="hl-e">NodeDown</span> / node-02 / critical\n  ├─ <span class="hl-w">PodPending</span> / order-service\n  └─ <span class="hl-w">PodPending</span> / payment-service'},
+      {name:'告警聚合', detail:'<span class="hl-k">时间窗关联</span> [11:15:00 ~ 11:16:32]\n事件 <span class="hl-v">INC-20250622-002</span>:\n  主告警: NodeDown(node-02)\n  派生告警: 2 个 PodPending\n  判定: <span class="hl-v">连锁故障</span>'},
+      {name:'拓扑关联', detail:'<span class="hl-k">查询拓扑</span>\nnode-02 (iaas) 宕机:\n  ├─ order-service (2/3 副本)\n  ├─ payment-service (1/2 副本)\n  └─ log-collector (daemonset)\n受影响范围: <span class="hl-w">2 个业务服务降级</span>'},
+      {name:'指标分析', detail:'<span class="hl-k">Prometheus 查询</span>\nnode-02:\n  up = <span class="hl-e">0</span> (心跳丢失)\n  kube_node_status_condition = <span class="hl-e">NotReady</span>\n集群资源:\n  可调度 CPU 剩余 = <span class="hl-w">1.2 cores</span>\n  待调度 Pod 数 = <span class="hl-w">4</span> (需求 3.5 cores)'},
+      {name:'日志分析', detail:'<span class="hl-k">Loki 查询</span> kube-scheduler\n[11:16:30] <span class="hl-e">0/3 nodes available: 2 Insufficient memory, 1 node(s) had untolerated taint</span>\n[11:16:31] <span class="hl-e">failed scheduling: predicates failed</span>\n特征: 集群资源不足,Pod 无法重新调度'},
+      {name:'历史案例检索', detail:'<span class="hl-k">Chroma 检索</span> Top-3\n匹配 #1 (相似度 <span class="hl-v">0.89</span>):\n  <span class="hl-v">INC-20250301-集群资源不足</span>\n  症状: NodeDown + PodPending + 0/N nodes\n  处置: 扩容 node + 临时降配'},
+      {name:'根因推断', detail:'<span class="hl-k">LLM 推理</span>\n<span class="hl-v">根因假设 (置信度 0.87):</span>\nnode-02 宕机 → 集群可用资源不足以承载迁移负载:\n1. node-02 承载 2 个业务服务共 3 副本\n2. 剩余 node-01/node-03 内存仅剩 1.2 cores\n3. 待调度 Pod 需 3.5 cores → 资源缺口\n4. Pod 持续 Pending 无法自愈'},
+      {name:'报告生成', detail:'<span class="hl-k">报告生成</span>\n  confidence: <span class="hl-v">0.87</span>\n  recommendations: <span class="hl-v">3 条</span>\n  grafana_links: <span class="hl-v">3 条</span>\n<span class="hl-v">✓ 报告已生成,耗时 31.7s</span>'}
+    ],
+    report:{
+      summary:'node-02 宕机后集群资源不足,order-service 和 payment-service 的 Pod 无法重新调度',
+      severity:'P1 严重',
+      affected:['node-02 (Node NotReady)','order-service (2/3 副本丢失)','payment-service (1/2 副本丢失)'],
+      rootCause:'node-02 物理宕机(心跳丢失 5 分钟),该节点承载 order-service(2/3)和 payment-service(1/2)副本。宕机后剩余 node-01/node-03 可用资源仅 1.2 cores,而待调度 Pod 需 3.5 cores,资源缺口导致 Pod 持续 Pending,业务处于降级状态无法自愈。',
+      confidence:87,
+      evidence:{'指标':'node-02 up=0;剩余 CPU 1.2 cores vs 需求 3.5 cores','日志':'kube-scheduler: 0/3 nodes available, Insufficient memory','历史':'匹配 INC-20250301 集群资源不足案例 (0.89)'},
+      recommendations:[
+        '【紧急】检查 node-02 硬件状态(电源/磁盘/网卡),若不可恢复则立即标记为 unschedulable',
+        '【紧急】临时扩容 1 台 worker node(node-04),恢复 order-service 和 payment-service 副本数',
+        '【长期】配置集群 HPA + Cluster Autoscaler,根据资源水位自动扩容,避免单点宕机引发连锁'
+      ],
+      grafana:[
+        {label:'集群资源概览', url:'http://grafana.local/d/cluster?from=now-1h&to=now'},
+        {label:'节点状态', url:'http://grafana.local/d/nodes?from=now-1h&to=now'},
+        {label:'Pod 调度', url:'http://grafana.local/d/k8s-pods?from=now-1h&to=now'}
+      ]
+    }
+  },
+  {
+    id:'slowquery', name:'慢查询超时',
+    alerts:[],
+    chatTrigger:'为什么 payment-service 请求超时?',
+    steps:[
+      {name:'意图识别', detail:'<span class="hl-k">用户对话触发</span>\n输入: "为什么 payment-service 请求超时?"\n识别服务: <span class="hl-v">payment-service</span>\n识别症状: <span class="hl-w">请求超时</span>\n生成调查计划: 查拓扑 → 查依赖指标 → 查日志'},
+      {name:'拓扑关联', detail:'<span class="hl-k">查询 topology.yaml</span>\npayment-service (saas)\n  ├─ mysql-payment-db (paas) [SQL 依赖]\n  └─ redis-session (paas) [缓存依赖]\n判定: 优先排查 <span class="hl-w">mysql-payment-db</span>(超时常见根因)'},
+      {name:'指标分析', detail:'<span class="hl-k">Prometheus 查询</span>payment-service:\n  http_latency_p95 = <span class="hl-e">3.2s</span> (正常 200ms,超 16x)\n  error_rate = <span class="hl-e">12.4%</span> (5xx 超时)\nmysql-payment-db:\n  slow_queries = <span class="hl-e">52/min</span> (正常 <5)\n  threads_connected = <span class="hl-e">200/200</span> (连接池耗尽)\n  innodb_lock_wait = <span class="hl-w">avg 8.4s</span>'},
+      {name:'日志分析', detail:'<span class="hl-k">Loki 查询</span> {service="payment-service"}\n<span class="hl-e">[ERROR] HikariPool-1 - Connection is not available, request timed out after 30000ms</span>\n<span class="hl-e">[ERROR] Failed to acquire connection from pool within 30 seconds</span>\n特征: 连接池耗尽,请求排队 → 超时级联'},
+      {name:'慢SQL定位', detail:'<span class="hl-k">MySQL slow_query_log</span>\nTop-1 慢查询 (avg <span class="hl-e">8.7s</span>):\n  SELECT * FROM payment_records\n  WHERE create_time > "2025-01-01"\n  ORDER BY id DESC LIMIT 1000;\nEXPLAIN: <span class="hl-w">type=ALL, rows=12400000, Using filesort</span>\n特征: <span class="hl-e">全表扫描 + 文件排序,缺少索引</span>'},
+      {name:'历史案例检索', detail:'<span class="hl-k">Chroma 检索</span>\n匹配 #1 (相似度 <span class="hl-v">0.85</span>):\n  <span class="hl-v">INC-20250512-慢SQL致连接池耗尽</span>\n  处置: 加索引 + 限制 LIMIT + 扩连接池'},
+      {name:'根因推断', detail:'<span class="hl-k">LLM 推理</span>\n<span class="hl-v">根因假设 (置信度 0.93):</span>\n慢 SQL 致 MySQL 连接池耗尽:\n1. payment_records 表 1240万行全表扫描(无索引)\n2. 每查询耗时 8.7s,连接占满 200/200\n3. payment-service 等连接 → 请求排队超时\n4. 级联影响所有依赖 DB 的接口'},
+      {name:'报告生成', detail:'<span class="hl-k">报告生成</span>\n  confidence: <span class="hl-v">0.93</span>\n  recommendations: <span class="hl-v">3 条</span>\n  grafana_links: <span class="hl-v">2 条</span>\n<span class="hl-v">✓ 报告已生成,耗时 33.2s</span>'}
+    ],
+    report:{
+      summary:'payment_records 表慢 SQL(全表扫描 1240万行)导致 MySQL 连接池耗尽,payment-service 请求超时',
+      severity:'P1 严重',
+      affected:['payment-service (p95延迟 3.2s,错误率 12.4%)','mysql-payment-db (连接池 200/200 耗尽)'],
+      rootCause:'payment_records 表存在无索引慢查询(SELECT ... WHERE create_time > ... ORDER BY id DESC),全表扫描 1240 万行 + 文件排序,单次耗时 8.7s。高频调用导致 MySQL 连接池(上限 200)迅速耗尽,payment-service 所有 DB 操作排队等待连接,请求超时级联。',
+      confidence:93,
+      evidence:{'指标':'MySQL slow_queries 52/min;连接池 200/200;innodb_lock_wait 8.4s','日志':'HikariPool: Connection is not available, request timed out 30000ms','慢SQL':'EXPLAIN type=ALL rows=12400000 Using filesort (payment_records)'},
+      recommendations:[
+        '【紧急】立即为 payment_records.create_time 添加索引(预计耗时 <1min,可在线执行)',
+        '【紧急】临时调大 payment-service Hikari 连接池上限(200→400),缓解排队',
+        '【长期】SQL 审核流程:慢查询日志接入告警;LIMIT 分页强制要求带索引条件'
+      ],
+      grafana:[
+        {label:'MySQL 性能面板', url:'http://grafana.local/d/mysql?from=now-1h&to=now&var-db=mysql-payment-db'},
+        {label:'服务延迟面板', url:'http://grafana.local/d/services?from=now-1h&to=now&var-svc=payment-service'}
+      ]
+    }
+  }
+];
+
+let currentScene = 0;
+let running = false;
+
+// ============ Render Alert List ============
+function renderAlerts(){
+  const scene = SCENES[currentScene];
+  const el = document.getElementById('alertList');
+  document.getElementById('alertCount').textContent = (scene.alerts.length||'(对话模式)') + (scene.alerts.length?' firing':'');
+
+  if(scene.alerts.length === 0){
+    el.innerHTML = `
+      <div class="alert-item" style="border-left-color:var(--cyan)">
+        <div class="alert-name">💬 对话模式触发</div>
+        <div class="alert-meta">输入问题即可启动 RCA 流程</div>
+      </div>
+      <button class="trigger-btn" onclick="triggerRCA()">启动 RCA 推理</button>
+      <div class="empty-state" style="margin-top:12px">该场景模拟用户对话提问<br>"为什么 payment-service 超时?"</div>
+    `;
+    return;
+  }
+
+  el.innerHTML = scene.alerts.map((a,i)=>`
+    <div class="alert-item firing">
+      <div class="alert-name">
+        <span class="badge ${a.severity==='critical'?'badge-critical':'badge-warning'}">${a.severity.toUpperCase()}</span>
+        ${a.name}
+      </div>
+      <div class="alert-meta">
+        <span>🔌 ${a.service}</span>
+        <span>📦 ${a.layer}</span>
+      </div>
+      <div class="alert-meta" style="margin-top:4px;color:var(--text)">${a.summary}</div>
+      <div class="alert-meta" style="margin-top:4px">⏰ ${a.startsAt}</div>
+    </div>
+  `).join('') + `<button class="trigger-btn" onclick="triggerRCA()">启动 RCA 推理</button>`;
+}
+
+// ============ Trigger RCA Workflow ============
+async function triggerRCA(){
+  if(running) return;
+  running = true;
+  const scene = SCENES[currentScene];
+  const wfEl = document.getElementById('workflowList');
+  const reportEl = document.getElementById('reportArea');
+  document.getElementById('wfStatus').innerHTML = '<span class="spin"></span> 运行中';
+  document.getElementById('reportTime').textContent = '';
+
+  // render steps skeleton
+  wfEl.innerHTML = scene.steps.map((s,i)=>`
+    <div class="workflow-step" id="step-${i}">
+      <div class="step-head">
+        <div class="step-num">${i+1}</div>
+        <div class="step-name">${s.name}</div>
+        <div class="step-status" id="status-${i}">等待中</div>
+      </div>
+      <div class="step-detail" id="detail-${i}"></div>
+    </div>
+  `).join('');
+
+  reportEl.innerHTML = '<div class="report-empty"><span class="spin"></span> Agent 正在分析中...</div>';
+
+  // run steps
+  for(let i=0; i<scene.steps.length; i++){
+    const step = scene.steps[i];
+    document.getElementById(`status-${i}`).innerHTML = '<span class="spin"></span>';
+    document.getElementById(`step-${i}`).classList.add('active');
+    await sleep(900 + Math.random()*700);
+    document.getElementById(`detail-${i}`).innerHTML = step.detail;
+    document.getElementById(`status-${i}`).textContent = '✓ 完成';
+    document.getElementById(`step-${i}`).classList.remove('active');
+    document.getElementById(`step-${i}`).classList.add('done');
+    document.getElementById(`step-${i}`).scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  document.getElementById('wfStatus').textContent = '✓ 完成';
+  // render report
+  await sleep(400);
+  renderReport(scene.report);
+  running = false;
+}
+
+// ============ Render Report ============
+function renderReport(r){
+  const el = document.getElementById('reportArea');
+  const now = new Date().toLocaleString('zh-CN',{hour12:false});
+  document.getElementById('reportTime').textContent = now;
+
+  el.innerHTML = `
+    <div class="report-card">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span class="badge badge-critical">${r.severity}</span>
+        <span style="font-size:11px;color:var(--text-dim)">${now}</span>
+      </div>
+      <div class="report-summary">${r.summary}</div>
+      <div class="report-section-title">置信度</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="confidence-bar" style="flex:1"><div class="confidence-fill" style="width:0%" id="confFill"></div></div>
+        <span style="font-size:13px;font-weight:600;color:var(--green)">${r.confidence}%</span>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-section-title">受影响资源</div>
+      <ul class="report-list">
+        ${r.affected.map(a=>`<li>${a}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="report-card">
+      <div class="report-section-title">根因分析</div>
+      <div style="font-size:12px;line-height:1.6;color:var(--text)">${r.rootCause}</div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-section-title">证据链</div>
+      <ul class="report-list">
+        ${Object.entries(r.evidence).map(([k,v])=>`<li><b style="color:var(--cyan)">${k}</b>: ${v}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="report-card">
+      <div class="report-section-title">处置建议</div>
+      ${r.recommendations.map(rec=>`<div class="rec-item">${rec}</div>`).join('')}
+    </div>
+
+    <div class="report-card">
+      <div class="report-section-title">Grafana 快照</div>
+      <div style="margin-top:4px">
+        ${r.grafana.map(g=>`<a class="grafana-link" href="${g.url}" target="_blank">📊 ${g.label} →</a>`).join('')}
+      </div>
+    </div>
+  `;
+
+  setTimeout(()=>{document.getElementById('confFill').style.width = r.confidence+'%';}, 100);
+}
+
+// ============ Chat ============
+document.getElementById('chatBtn').addEventListener('click', ()=>{
+  const v = document.getElementById('chatInput').value.trim();
+  if(!v) return;
+  // match scene by keyword
+  if(v.includes('payment')||v.includes('超时')||v.includes('timeout')){
+    switchScene(2);
+  } else if(v.includes('oom')||v.includes('内存')||v.includes('order')){
+    switchScene(0);
+  } else if(v.includes('node')||v.includes('节点')||v.includes('宕机')){
+    switchScene(1);
+  } else {
+    switchScene(0);
+  }
+  setTimeout(triggerRCA, 300);
+});
+document.getElementById('chatInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') document.getElementById('chatBtn').click();
+});
+
+// ============ Scene Switch ============
+document.querySelectorAll('.scene-tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    if(running) return;
+    switchScene(parseInt(tab.dataset.scene));
+  });
+});
+
+function switchScene(i){
+  currentScene = i;
+  document.querySelectorAll('.scene-tab').forEach((t,idx)=>t.classList.toggle('active', idx===i));
+  renderAlerts();
+  document.getElementById('workflowList').innerHTML = '<div class="empty-state">点击左侧告警或触发按钮<br>启动 RCA 推理流程</div>';
+  document.getElementById('reportArea').innerHTML = '<div class="report-empty">报告将在 RCA 流程完成后显示</div>';
+  document.getElementById('wfStatus').textContent = '等待触发';
+  document.getElementById('reportTime').textContent = '';
+  const v = SCENES[i].chatTrigger;
+  if(v) document.getElementById('chatInput').value = v;
+  else document.getElementById('chatInput').value = '';
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// init
+renderAlerts();
+</script>
+</body>
+</html>
