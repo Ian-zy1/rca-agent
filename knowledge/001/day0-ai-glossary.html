@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI / 大模型术语表 + UnifiedModel 示例详解</title>
+<style>
+:root {
+  --bg:#0b1220; --bg2:#0f172a; --card:#1e293b; --border:#334155;
+  --text:#e2e8f0; --dim:#94a3b8; --blue:#3b82f6; --cyan:#06b6d4;
+  --green:#10b981; --amber:#f59e0b; --red:#ef4444; --purple:#8b5cf6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.75;font-size:15px;
+  max-width:920px;margin:0 auto;padding:32px 24px 80px;
+}
+h1{color:#60a5fa;font-size:28px;border-bottom:2px solid var(--border);padding-bottom:12px;margin:24px 0 20px}
+h2{color:#7dd3fc;font-size:22px;margin:36px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+h3{color:var(--text);font-size:18px;margin:28px 0 12px}
+h4{color:var(--amber);font-size:16px;margin:24px 0 10px}
+p{margin:10px 0}
+code{
+  background:var(--card);padding:2px 7px;border-radius:4px;
+  font-family:"SF Mono",Consolas,Monaco,monospace;font-size:0.88em;color:#f0abfc;
+  border:1px solid var(--border);
+}
+pre{
+  background:var(--bg2);padding:16px 20px;border-radius:8px;
+  border:1px solid var(--border);overflow-x:auto;margin:14px 0;
+}
+pre code{background:none;border:none;padding:0;color:var(--text);font-size:0.85em}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--border);padding:8px 14px;text-align:left}
+th{background:var(--card);color:#7dd3fc;font-weight:600;white-space:nowrap}
+tr:nth-child(even){background:rgba(30,41,59,0.4)}
+blockquote{
+  border-left:3px solid var(--blue);margin:16px 0;padding:10px 18px;
+  background:rgba(59,130,246,0.06);border-radius:0 6px 6px 0;color:var(--dim);
+}
+blockquote p{margin:4px 0}
+a{color:#60a5fa;text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{padding-left:28px;margin:10px 0}
+li{margin:5px 0}
+hr{border:none;border-top:1px solid var(--border);margin:36px 0}
+strong{color:#fcd34d;font-weight:600}
+em{color:#a5f3fc}
+del{color:var(--dim)}
+/* Pygments code highlight (friendly dark) */
+.codehilite{background:var(--bg2);border-radius:8px;border:1px solid var(--border);margin:14px 0;overflow-x:auto}
+.codehilite pre{background:none;border:none;margin:0}
+.codehilite .k{color:#c792ea}
+.codehilite .s{color:#c3e88d}
+.codehilite .n{color:#eeffff}
+.codehilite .o{color:#89ddff}
+.codehilite .c{color:#546e7a;font-style:italic}
+.codehilite .nf{color:#82aaff}
+.codehilite .nc{color:#ffcb6b}
+.codehilite .nb{color:#f78c6c}
+.codehilite .m{color:#f78c6c}
+.codehilite .err{color:#ff5572}
+/* Anchor links */
+h1,h2,h3,h4{scroll-margin-top:20px}
+/* Scrollbar */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+</style>
+</head>
+<body>
+
+<div style="margin-bottom:24px;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:13px">
+  <a href="day0-ai-glossary.html">📖 术语表</a> · 
+  <a href="day0-langchain-langgraph-overview.html">⚙️ LangChain/LangGraph</a> · 
+  <a href="reference-alibaba-rca.html">🏢 阿里RCA参考</a> · 
+  <a href="../../demo/index.html">🎮 Demo演示</a>
+</div>
+
+<h1 id="ai-unifiedmodel">AI / 大模型术语表 + UnifiedModel 示例详解</h1>
+<blockquote>
+<p><strong>用途</strong>: 今晚快速浏览,建立"名词地图"。术语不求背诵,求"看到能反应过来是什么"<br />
+<strong>建议</strong>: 打开这份文档,边看边对照 Day 0 的 LangChain/LangGraph 速览</p>
+</blockquote>
+<hr />
+<h1 id="part-1-ai-30">Part 1 · AI / 大模型常见术语(30 个必知)</h1>
+<h2 id="7">一、基础概念(7 个)</h2>
+<h3 id="1-llm-large-language-model">1. LLM (Large Language Model · 大语言模型)</h3>
+<ul>
+<li><strong>是什么</strong>: 用海量文本训练出来的超大型 AI,能"理解"和"生成"人类语言</li>
+<li><strong>开发者类比</strong>: 一个读过整个互联网的"超级函数",输入文本返回文本</li>
+<li><strong>例子</strong>: GPT-4、DeepSeek-V3、Qwen(通义千问)、Llama</li>
+</ul>
+<h3 id="2-parameters">2. 参数量(Parameters · 参数)</h3>
+<ul>
+<li><strong>是什么</strong>: 模型内部"旋钮"的数量,决定模型能力上限</li>
+<li><strong>开发者类比</strong>: 类似数据库的索引数量,越多越精细但越慢越贵</li>
+<li><strong>常见</strong>: 7B(70亿)、13B、70B、175B。B = Billion = 10亿</li>
+<li><strong>读法</strong>: "7B" 读作"七十亿参数"</li>
+</ul>
+<h3 id="3-token">3. Token(词元)</h3>
+<ul>
+<li><strong>是什么</strong>: 大模型处理文本的最小单位。不是"字"也不是"词"</li>
+<li><strong>规则</strong>: 1 个英文单词 ≈ 1-2 token;1 个汉字 ≈ 1.5-2 token</li>
+<li><strong>为什么重要</strong>: API 按 token 计费,上下文窗口也按 token 算</li>
+<li><strong>例子</strong>: "根因分析" ≈ 3-4 token;"Root Cause Analysis" ≈ 4 token</li>
+</ul>
+<h3 id="4-context-window">4. Context Window(上下文窗口)</h3>
+<ul>
+<li><strong>是什么</strong>: 一次对话能塞进去的最大 token 数</li>
+<li><strong>开发者类比</strong>: 类似数据库查询的 <code>LIMIT</code>,超了就截断或报错</li>
+<li><strong>常见</strong>: 8K / 32K / 128K / 200K</li>
+<li><strong>影响</strong>: 窗口越大,能塞的文档越多,但越贵越慢</li>
+</ul>
+<h3 id="5-inference">5. Inference(推理)</h3>
+<ul>
+<li><strong>是什么</strong>: 模型训练好之后,接收输入、生成输出的过程</li>
+<li><strong>开发者类比</strong>: 训练 = 编译;推理 = 运行</li>
+<li><strong>注意</strong>: "推理"不是逻辑推理,是"运行模型"</li>
+</ul>
+<h3 id="6-hallucination">6. Hallucination(幻觉)</h3>
+<ul>
+<li><strong>是什么</strong>: 模型一本正经地胡说八道,编造不存在的事实</li>
+<li><strong>开发者类比</strong>: 类似 NullPointerException——看起来正常但结果完全错</li>
+<li><strong>RCA 中的危险</strong>: 模型可能编造不存在的指标或日志,必须用 RAG 约束</li>
+</ul>
+<h3 id="7-multimodal">7. Multimodal(多模态)</h3>
+<ul>
+<li><strong>是什么</strong>: 模型能同时处理文本、图片、音频、视频等多种输入</li>
+<li><strong>例子</strong>: GPT-4o 能看图说话</li>
+<li><strong>RCA 中</strong>: 未来可用于分析 Grafana 截图或日志截图</li>
+</ul>
+<hr />
+<h2 id="prompt-6">二、Prompt 相关(6 个)</h2>
+<h3 id="8-prompt">8. Prompt(提示词)</h3>
+<ul>
+<li><strong>是什么</strong>: 你给模型的输入文本,决定输出质量</li>
+<li><strong>开发者类比</strong>: Prompt 是"需求文档",写得好=输出好</li>
+<li><strong>核心</strong>: 垃圾进垃圾出(Garbage In Garbage Out)</li>
+</ul>
+<h3 id="9-system-prompt-user-assistant">9. System Prompt / User / Assistant(三个角色)</h3>
+<ul>
+<li><strong>是什么</strong>: 对话中的三种角色</li>
+<li><strong>System</strong>: 设定模型身份("你是 SRE 专家")</li>
+<li><strong>User</strong>: 你的问题("分析这个告警")</li>
+<li><strong>Assistant</strong>: 模型的回复</li>
+<li><strong>开发者类比</strong>: System = 环境变量;User = 命令行参数;Assistant = 程序输出</li>
+</ul>
+<h3 id="10-temperature">10. Temperature(温度)</h3>
+<ul>
+<li><strong>是什么</strong>: 控制输出随机性,0~2 之间</li>
+<li><strong>规则</strong>:</li>
+<li><code>0</code> = 每次输出一样(确定性)</li>
+<li><code>1</code> = 有随机性(有创造力)</li>
+<li><code>2</code> = 非常随机(可能乱说)</li>
+<li><strong>RCA 该用多少</strong>: <code>0</code>,根因分析要确定性,不能每次结果不同</li>
+</ul>
+<h3 id="11-top_p">11. Top_p(核采样)</h3>
+<ul>
+<li><strong>是什么</strong>: 和 Temperature 类似,控制采样范围。只从概率前 p% 的词里选</li>
+<li><strong>规则</strong>: 通常和 Temperature 二选一,不同时调</li>
+<li><strong>建议</strong>: 调了 Temperature 就别动 Top_p(默认 1)</li>
+</ul>
+<h3 id="12-few-shot">12. Few-shot(少样本提示)</h3>
+<ul>
+<li><strong>是什么</strong>: 在 Prompt 里给几个示例,让模型"照着做"</li>
+<li><strong>开发者类比</strong>: 给函数写单元测试的输入输出样例</li>
+<li><strong>对比</strong>: Zero-shot(不给示例)/ One-shot(给一个)/ Few-shot(给多个)</li>
+</ul>
+<h3 id="13-chain-of-thought-cot">13. Chain-of-Thought / CoT(思维链)</h3>
+<ul>
+<li><strong>是什么</strong>: 让模型"一步一步想",而不是直接给答案</li>
+<li><strong>开发者类比</strong>: Debug 时加 print 看中间过程,而不是只看最终结果</li>
+<li><strong>用法</strong>: Prompt 里加"请一步步分析"或"Let's think step by step"</li>
+<li><strong>RCA 必用</strong>: 根因推断必须用 CoT,否则模型可能跳到错误结论</li>
+</ul>
+<hr />
+<h2 id="6">三、训练相关(6 个)</h2>
+<h3 id="14-pretrain">14. Pretrain(预训练)</h3>
+<ul>
+<li><strong>是什么</strong>: 用海量文本(网页/书籍/代码)训练模型的基础能力</li>
+<li><strong>开发者类比</strong>: 大学通识教育,什么都学一点</li>
+<li><strong>产出</strong>: 基座模型(Base Model),如 Qwen-7B-Base</li>
+<li><strong>特点</strong>: 贵(百万到千万美元级)、耗时(数周到数月)</li>
+</ul>
+<h3 id="15-sft-supervised-fine-tuning">15. SFT (Supervised Fine-Tuning · 指令微调)</h3>
+<ul>
+<li><strong>是什么</strong>: 用"问答对"数据训练模型听指令</li>
+<li><strong>开发者类比</strong>: 职业培训,学具体技能</li>
+<li><strong>产出</strong>: 指令模型(Chat Model),如 Qwen-7B-Chat</li>
+<li><strong>数据格式</strong>: <code>{"instruction": "...", "input": "...", "output": "..."}</code></li>
+</ul>
+<h3 id="16-rlhf-reinforcement-learning-from-human-feedback">16. RLHF (Reinforcement Learning from Human Feedback · 人类反馈强化学习)</h3>
+<ul>
+<li><strong>是什么</strong>: 让人类给模型输出打分,用强化学习让模型"更讨人喜欢"</li>
+<li><strong>开发者类比</strong>: 绩效考核,根据反馈调整行为</li>
+<li><strong>作用</strong>: 让模型回答更安全、更有用、更符合人类偏好</li>
+<li><strong>现状</strong>: DPO(Direct Preference Optimization)是更简单的替代方案</li>
+</ul>
+<h3 id="17-fine-tuning">17. Fine-tuning(微调)</h3>
+<ul>
+<li><strong>是什么</strong>: 在已有模型基础上,用你的数据继续训练</li>
+<li><strong>开发者类比</strong>: Fork 一个开源项目,改成你需要的</li>
+<li><strong>用途</strong>: 让模型学会特定领域知识或风格</li>
+<li><strong>注意</strong>: 改的是模型"行为",不是"知识"(知识用 RAG)</li>
+</ul>
+<h3 id="18-lora-low-rank-adaptation">18. LoRA (Low-Rank Adaptation)</h3>
+<ul>
+<li><strong>是什么</strong>: 一种高效的微调方法,只训练很少的参数(原模型的 0.1%-1%)</li>
+<li><strong>开发者类比</strong>: 不改主程序,只加一个"补丁包"</li>
+<li><strong>优势</strong>: 普通 GPU 就能跑(7B 模型 LoRA 只要 8-16GB 显存)</li>
+<li><strong>用途</strong>: 比赛中"大模型调优"考的就是这个</li>
+</ul>
+<h3 id="19-quantization">19. Quantization(量化)</h3>
+<ul>
+<li><strong>是什么</strong>: 把模型的参数从高精度(FP16)压缩到低精度(INT8/INT4)</li>
+<li><strong>开发者类比</strong>: 图片压缩,从 PNG 变 JPEG,文件变小但画质略降</li>
+<li><strong>效果</strong>: 7B 模型 FP16 要 14GB,INT4 只要 4GB</li>
+<li><strong>用途</strong>: 让大模型在普通电脑上跑</li>
+</ul>
+<hr />
+<h2 id="7_1">四、应用相关(7 个)</h2>
+<h3 id="20-embedding">20. Embedding(嵌入 / 向量化)</h3>
+<ul>
+<li><strong>是什么</strong>: 把文本变成一串数字(向量),让计算机能算"语义相似度"</li>
+<li><strong>开发者类比</strong>: 给每段文本生成一个"指纹",相似文本指纹相近</li>
+<li><strong>例子</strong>: "Pod 内存溢出" → <a href="768 维">0.12, -0.34, 0.56, ...</a></li>
+<li><strong>用途</strong>: 语义搜索、RAG、相似度计算</li>
+</ul>
+<h3 id="21-vector-database">21. Vector Database(向量数据库)</h3>
+<ul>
+<li><strong>是什么</strong>: 专门存储和检索向量的数据库</li>
+<li><strong>开发者类比</strong>: 类似 Elasticsearch,但搜的是"语义"而不是"关键词"</li>
+<li><strong>常见</strong>: Chroma / Milvus / Pinecone / FAISS</li>
+<li><strong>用途</strong>: RAG 的存储层</li>
+</ul>
+<h3 id="22-rag-retrieval-augmented-generation">22. RAG (Retrieval-Augmented Generation · 检索增强生成)</h3>
+<ul>
+<li><strong>是什么</strong>: 先从知识库检索相关文档,再喂给 LLM 回答</li>
+<li><strong>开发者类比</strong>: 开卷考试——先翻书找答案,再用自己的话回答</li>
+<li><strong>流程</strong>: 提问 → 向量检索 Top-K 文档 → 拼接 Prompt → LLM 生成</li>
+<li><strong>解决</strong>: 幻觉 + 知识时效 + 私有数据</li>
+</ul>
+<h3 id="23-chunking">23. Chunking(文档切分)</h3>
+<ul>
+<li><strong>是什么</strong>: 把长文档切成小块,每块单独向量化</li>
+<li><strong>开发者类比</strong>: 类似数据库分页,一页一页存</li>
+<li><strong>策略</strong>: 固定大小(512 token)/ 递归切分 / 按语义切分</li>
+<li><strong>影响</strong>: 切太大检索不准,切太小丢失上下文</li>
+</ul>
+<h3 id="24-agent">24. Agent(智能体)</h3>
+<ul>
+<li><strong>是什么</strong>: LLM + 工具 + 自主决策 = 能完成复杂任务的 AI</li>
+<li><strong>开发者类比</strong>: LLM 是大脑,工具是手脚,Agent 是完整的"人"</li>
+<li><strong>核心</strong>: 模型自己决定"调什么工具、传什么参数、什么时候停"</li>
+</ul>
+<h3 id="25-function-calling-tool-use">25. Function Calling / Tool Use(函数调用 / 工具调用)</h3>
+<ul>
+<li><strong>是什么</strong>: 你把函数签名告诉 LLM,LLM 自己决定调不调</li>
+<li><strong>开发者类比</strong>: 给 LLM 注册一个"API 网关",它自己决定路由</li>
+<li><strong>流程</strong>: 问模型 → 模型返回 <code>{"name":"query_prometheus","args":{...}}</code> → 你执行 → 结果回传模型 → 最终回答</li>
+<li><strong>RCA 核心</strong>: 让模型查 Prometheus、查 Loki,这就是 Agent 的发动机</li>
+</ul>
+<h3 id="26-react-reasoning-acting">26. ReAct (Reasoning + Acting)</h3>
+<ul>
+<li><strong>是什么</strong>: Agent 的一种模式,交替"思考"和"行动"</li>
+<li><strong>流程</strong>: Thought(想) → Action(做) → Observation(看结果) → Thought → ...</li>
+<li><strong>开发者类比</strong>: Debug 的循环——假设→改代码→运行→看结果→再假设</li>
+<li><strong>vs Function Calling</strong>: FC 是单步;ReAct 是循环</li>
+</ul>
+<hr />
+<h2 id="2">五、架构相关(2 个)</h2>
+<h3 id="27-transformer">27. Transformer</h3>
+<ul>
+<li><strong>是什么</strong>: 几乎所有现代大模型(GPT/Qwen/Llama)的底层架构</li>
+<li><strong>核心</strong>: Self-Attention 机制——让模型理解词与词的关系</li>
+<li><strong>开发者类比</strong>: 类似一个"全局上下文感知的解析器",不像 RNN 只看前面</li>
+<li><strong>你只需知道</strong>: 大模型都用这个架构,不用懂数学</li>
+</ul>
+<h3 id="28-attention-self-attention">28. Attention / Self-Attention(注意力机制)</h3>
+<ul>
+<li><strong>是什么</strong>: 让模型在处理一个词时,"关注"到其他相关的词</li>
+<li><strong>例子</strong>: 处理"苹果"时,attention 会关注上下文判断是水果还是公司</li>
+<li><strong>开发者类比</strong>: 类似 SQL 的 JOIN——根据关联性把信息拼起来</li>
+</ul>
+<hr />
+<h2 id="2_1">六、工程/框架相关(2 个)</h2>
+<h3 id="29-mcp-model-context-protocol">29. MCP (Model Context Protocol · 模型上下文协议)</h3>
+<ul>
+<li><strong>是什么</strong>: Anthropic 提出的标准协议,让 AI 安全地访问外部工具和数据</li>
+<li><strong>开发者类比</strong>: 类似 OpenAPI/Swagger,但是给 AI Agent 用的</li>
+<li><strong>用途</strong>: 标准化"AI 调工具"的方式,阿里 sysom_mcp / ack-mcp-server 都用这个</li>
+</ul>
+<h3 id="30-prompt-engineering">30. Prompt Engineering(提示工程)</h3>
+<ul>
+<li><strong>是什么</strong>: 系统性地设计和优化 Prompt,以获得更好的输出</li>
+<li><strong>开发者类比</strong>: 类似 SQL 调优——同样的数据,查询写法不同性能差很多</li>
+<li><strong>核心技巧</strong>: 角色设定 / Few-shot / CoT / 结构化输出约束</li>
+</ul>
+<hr />
+<h1 id="part-2-unifiedmodel-incident-investigation">Part 2 · UnifiedModel incident-investigation 是什么</h1>
+<h2 id="_1">一句话回答</h2>
+<p><strong>阿里官方开源的一个完整可运行的 RCA(根因分析)Agent demo</strong>,演示了"如何用 AI 智能体自动排查微服务故障"。</p>
+<h2 id="_2">它演示了什么场景</h2>
+<div class="codehilite"><pre><span></span><code>故障: 支付网关 SLO 违规(延迟超标)
+   ↓
+Agent 自主执行:
+   1. 发现支付网关延迟异常
+   2. 沿拓扑图向上游追溯(跨域遍历)
+   3. 按 Runbook 诊断协议逐步排查
+   4. 定位根因: checkout-service 发起了&quot;重试风暴&quot;(大量重试导致雪崩)
+   5. 输出根因报告
+</code></pre></div>
+
+<p><strong>通俗理解</strong>: 就像一个"SRE 机器人",接到告警后自己查指标、查日志、查拓扑,最后告诉你"哪里坏了、为什么坏了"。</p>
+<h2 id="_3">它的组成(文件结构)</h2>
+<div class="codehilite"><pre><span></span><code>examples/incident-investigation/
+├── start.sh              ← 一键启动脚本
+├── seed-data/            ← 种子数据
+│   ├── prometheus/       ← Prometheus 模拟指标数据
+│   └── elasticsearch/    ← ES 模拟日志数据
+├── umodel-config/        ← UModel 配置(实体/关系/拓扑定义)
+│   ├── entities.yaml     ← 实体定义(服务/Pod/Node)
+│   ├── telemetry.yaml    ← 遥测数据定义(指标/日志)
+│   └── topology.yaml     ← 拓扑关系(谁依赖谁)
+├── runbooks/             ← 诊断手册(结构化专家经验)
+│   └── latency-runbook.yaml  ← 延迟故障的诊断流程
+└── README.md             ← 说明文档
+</code></pre></div>
+
+<h2 id="_4">它用了哪些技术(架构)</h2>
+<div class="codehilite"><pre><span></span><code>┌──────────────────────────────────────────┐
+│            LLM (大模型推理)               │
+│     (通义千问 / 任何 OpenAI 兼容 API)     │
+└──────────────────┬───────────────────────┘
+                   │ 调用
+┌──────────────────▼───────────────────────┐
+│          UModel (语义层 / 本体论)         │
+│  ┌─────────┐  ┌──────────┐  ┌─────────┐ │
+│  │ EntitySet│  │Telemetry │  │ Storage │ │
+│  │ (实体)   │  │DataSet   │  │ (存储)  │ │
+│  └────┬────┘  └────┬─────┘  └────┬────┘ │
+│       └────── Link(关系) ────────┘      │
+└──────────────────┬───────────────────────┘
+                   │ 通过 MCP 协议查询
+    ┌──────────────┼──────────────┐
+    ▼              ▼              ▼
+┌───────┐   ┌──────────┐   ┌──────────┐
+│PromQL │   │ES/Loki   │   │ CMDB     │
+│查指标  │   │查日志    │   │查拓扑    │
+└───────┘   └──────────┘   └──────────┘
+</code></pre></div>
+
+<p><strong>通俗解释</strong>:
+- <strong>LLM</strong> 是大脑,负责推理
+- <strong>UModel</strong> 是"翻译层",让大脑能看懂运维数据(知道"这个指标属于哪个服务")
+- <strong>MCP 工具</strong> 是手脚,负责实际查 Prometheus / ES / CMDB</p>
+<h2 id="runbook">Runbook 是什么(关键概念)</h2>
+<p>Runbook = <strong>结构化的专家诊断经验</strong>。不是纯文本,而是拆成 5 类:</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>作用</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Observation(观察)</td>
+<td>该看什么指标</td>
+<td>"查支付网关 P99 延迟"</td>
+</tr>
+<tr>
+<td>Toolkit(工具)</td>
+<td>用什么工具查</td>
+<td>"用 PromQL 查 http_latency"</td>
+</tr>
+<tr>
+<td>Knowledge(知识)</td>
+<td>判断标准</td>
+<td>"P99 &gt; 500ms = 异常"</td>
+</tr>
+<tr>
+<td>Automation(自动化)</td>
+<td>能自动做什么</td>
+<td>"自动拉取上下游链路"</td>
+</tr>
+<tr>
+<td>Skill(技能)</td>
+<td>复合能力</td>
+<td>"重试风暴识别"</td>
+</tr>
+</tbody>
+</table>
+<p><strong>对比纯 RAG</strong>: RAG 是"把文档扔进去让模型自己找";Runbook 是"给模型一份结构化的排查清单",精准得多。</p>
+<h2 id="_5">怎么跑起来</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 1. Clone 仓库</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/alibaba/UnifiedModel.git
+<span class="nb">cd</span><span class="w"> </span>UnifiedModel/examples/incident-investigation
+
+<span class="c1"># 2. 配置 LLM API Key</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;你的key&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_BASE_URL</span><span class="o">=</span><span class="s2">&quot;https://api.siliconflow.cn/v1&quot;</span><span class="w">  </span><span class="c1"># 或 DashScope</span>
+
+<span class="c1"># 3. 一键启动(会自动起 Prometheus + ES + 种子数据)</span>
+./start.sh
+
+<span class="c1"># 4. 观察输出:Agent 会打印每一步推理过程</span>
+</code></pre></div>
+
+<h2 id="_6">对你的价值(为什么值得看)</h2>
+<table>
+<thead>
+<tr>
+<th>价值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>理解完整 RCA 链路</strong></td>
+<td>从告警到根因,每一步怎么做的</td>
+</tr>
+<tr>
+<td><strong>学习 UModel 建模思路</strong></td>
+<td>比你手写 topology.yaml 更系统</td>
+</tr>
+<tr>
+<td><strong>学习 Runbook 设计</strong></td>
+<td>比纯 RAG 精准的诊断协议</td>
+</tr>
+<tr>
+<td><strong>学习 MCP 工具封装</strong></td>
+<td>每个诊断动作如何抽象成工具</td>
+</tr>
+<tr>
+<td><strong>比赛加分</strong></td>
+<td>能说"参考了阿里 UModel 的设计思路"</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rca">和你的 RCA 智能体的关系</h2>
+<div class="codehilite"><pre><span></span><code>你的计划:                    阿里的实现:
+─────────                    ──────────
+LangGraph 状态机      ←→     UModel Agent
+topology.yaml         ←→     UModel entities/topology
+Function Calling      ←→     MCP 工具集
+RAG 检索历史案例       ←→     Runbook 知识库
+Prometheus 查询       ←→     PromQL MCP 工具
+</code></pre></div>
+
+<p><strong>建议</strong>: 周末如有时间,跑一遍这个 demo,对照你的 PRD 看哪里可以借鉴。但<strong>不要在一周内照搬</strong>,你的目标是学会基础 + 做出自己的 demo。</p>
+<hr />
+<h2 id="_7">今晚验收清单</h2>
+<p>术语表:
+- [ ] 能区分 Token / Context Window / Parameters
+- [ ] 知道 Temperature 在 RCA 中该设 0
+- [ ] 能说出 Few-shot 和 CoT 的区别
+- [ ] 知道 RAG 解决什么问题(幻觉/时效/私有数据)
+- [ ] 知道 Function Calling 和 ReAct 的关系(单步 vs 循环)</p>
+<p>UnifiedModel:
+- [ ] 知道 incident-investigation 是阿里的 RCA demo
+- [ ] 理解 UModel 的作用(语义层/让 AI 看懂运维数据)
+- [ ] 理解 Runbook 比 RAG 精准在哪(结构化诊断协议)
+- [ ] 知道这个 demo 周末再看,不急</p>
+</body>
+</html>
