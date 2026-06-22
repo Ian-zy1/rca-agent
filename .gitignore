@@ -1,0 +1,21 @@
+# Project tracking (local only)
+.project/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+venv/
+rca-env/
+*.egg-info/
+
+# Environment variables
+.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
