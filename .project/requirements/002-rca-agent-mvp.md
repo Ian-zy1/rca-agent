@@ -97,3 +97,15 @@ v1.0
 - **完成**: PRD 文档(505行)、HTML交互演示(482行)、知识库(3份学习材料)、阿里RCA调研、Oracle交叉评审
 - **阻塞**: 代码尚未开始(依赖 001 学习计划先打基础)
 - **下一步**: 等 Day4(Function Calling)学完后,开始 Phase 1 工具封装
+
+### 2026-06-23（D1 实操，超额）
+
+- **环境就绪**: python3.12 venv + langchain/langgraph/openai/dotenv；硅基流动三项去风险全绿（chat ✅ / FC tool_call ✅ / bge-m3 1024维 ✅）
+- **Phase 1 前置完成**: 亲手跑通 5 个 demo（chat/FC/embeddings/agent循环/结构化输出）+ 真实 `query_prometheus()` 工具打 VictoriaMetrics
+- **重大发现（影响场景设计）**: 真实 VM 监控的是**传统基础设施（ES/MySQL/Redis/Kafka 主机）**，非 K8s；PRD 原 3 场景（PodOOMKilled/NodeDown/HikariPool）**全部不匹配**
+- **场景重设计**: 改为 **IaaS/PaaS/SaaS 跨层 RCA**（容器场景周末用 rca-simulator 补）；3 个真实场景锁定：MySQL 慢查询→行锁竞争 / Redis 内存→OOM / ES JVM 堆→泄漏
+- **真 RCA 跑通**: demo_agent_real 在真实 MySQL 上做多轮并行取证，正确识别行锁竞争根因（交叉验证 慢查询+缓冲池命中率99.97%+锁等待）
+- **真实标签摸清**: 主键 `instance`(host:port) + `cluster`(ES) + `ip`，**无** pod/container/service；Redis `maxmemory=0`（场景需改用 RSS vs 主机内存）
+- **Plan 更新**: PLAN.md → v2.1（D2 减载、Ollama 挪周末、3 跨层场景、缓冲策略）；UModel 调研留档（本周不部署，借 Runbook 思路）
+- **阻塞**: 无
+- **下一步（D2 周三）**: 据真实标签写 `topology.yaml` + 定义 `AlertEvent`/`RCAReport` 模型 + 告警分类 Prompt + 三个定调（FC节点内/对话直入拓扑/接口4个）
