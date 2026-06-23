@@ -14,19 +14,17 @@
 
 **循环**:Thought(想)→ Action(做)→ Observation(看结果)→ Thought → ...
 
-**例子**(RCA 场景):
+**例子**(RCA 场景,真实 VictoriaMetrics 数据 — PaaS 层 MySQL):
 ```
-Thought: 用户问"为什么 order-service 慢"。我需要先查指标。
-Action: query_prometheus("rate(http_request_duration_seconds_sum{service='order-service'}[5m])")
-Observation: P95 延迟从 200ms 涨到 1800ms
-Thought: 延迟涨了 9 倍,可能下游慢。查依赖的 MySQL。
-Action: query_prometheus("mysql_global_status_slow_queries")
-Observation: 慢查询从 5/min 涨到 80/min
-Thought: MySQL 慢查询暴涨,可能是根因。但要看日志确认。
-Action: query_loki('app="order-service" AND level="error"')
-Observation: "HikariPool-1 - Connection is not available"
-Thought: 连接池耗尽,慢 SQL 占满连接。可以下结论了。
-Final Answer: 根因是 MySQL 慢 SQL 占满连接池...
+Thought: 业务反馈 MySQL 10.3.240.116:19211 下单慢。先核实慢查询。
+Action: query_prometheus("mysql_global_status_slow_queries{instance='10.3.240.116:19211'}")
+Observation: 慢查询累计 1580(偏高,但是计数器,要看速率)
+Thought: slow_queries 是计数器,得算 rate;同时排查锁竞争。
+Action: query_prometheus("mysql_global_status_innodb_row_lock_time{instance='10.3.240.116:19211'}")
+Action: query_prometheus("rate(mysql_global_status_questions{instance='10.3.240.116:19211'}[5m])")
+Observation: 行锁等待累计 ~18 小时;QPS 27;缓冲池命中率 99.97%
+Thought: 命中率高排除 IO;CPU 0.23% 排除算力;行锁等待极长 → 锁竞争是根因。
+Final Answer: 根因是 InnoDB 行锁竞争,下单事务互相阻塞 → 排查长事务/优化锁粒度。
 ```
 
 **优势**:灵活、可解释(每步思考可见)。**劣势**:容易绕圈子(死循环)、token 消耗高。
@@ -162,6 +160,22 @@ Anthropic 2024 年提出的**标准化 AI 访问工具/数据**的协议。
 
 > **Function Calling = LLM 决策 + 你执行。把工具的 name/description/parameters(JSON Schema)告诉 LLM,LLM 返回 tool_call,你执行后回传结果。description 写得好 = Agent 智能程度高。**
 
+### ⚠️ 但 description 不够——模型会查错指标(实操验证)
+
+光写好 description,**模型仍可能在歧义场景查错方向**。实测(D1 demo_agent):告警"频繁重启",模型第一反应查 CPU(`container_cpu_usage_seconds_total`),但真实根因是内存。
+
+**原因**:对"频繁重启",CPU 和内存都说得通,模型靠直觉选,会选错。
+
+**解法:场景→指标 的结构化约束(Runbook 思路)**。在工具描述或 system prompt 里塞一张对照表,把模型的选择范围约束在正确指标族内:
+
+| 告警类型 | 该查的指标族 |
+|---|---|
+| 频繁重启 / OOM | 内存(used/rss)、重启次数 |
+| 响应慢 / 超时 | 延迟、连接数、锁等待 |
+| 节点宕机 | 主机 CPU/内存/心跳 |
+
+> **结论:description 决定"会不会调工具",场景对照表决定"调对没调对"。两者结合,Agent 才可靠。**(本条来自 D1 demo_agent_real 真实发现)
+
 ---
 
 ## 模块 3 · Embedding 与向量化原理
@@ -205,7 +219,7 @@ Embedding 模型训练目标:**拉近相似句对,推远不相似句对**。
 | 1536 | 很高 | 较慢 | 较贵 | OpenAI ada-002 |
 | 3072 | 极高 | 慢 | 贵 | OpenAI text-embedding-3-large |
 
-**RCA 选 bge-m3(1024 维)**:中文好,硅基流动免费,1024 维够用。
+**RCA 选 Qwen3-Embedding-0.6B(1024 维)**:2025 年 MTEB 多语言榜首,硅基流动可用,1024 维和 bge-m3 同维度可直接替换;bge-m3 仍免费可用作兜底。高精度场景用 Qwen3-Embedding-4B(2560 维)。
 
 ### 主流 Embedding 模型
 
@@ -392,24 +406,25 @@ RecursiveCharacterTextSplitter(
 
 ### RCA 应用:历史案例库
 
-**数据准备**:10-30 条历史故障案例,每条格式:
+**数据准备**:10-30 条历史故障案例,每条格式(以真实 VM 的 PaaS 层 Redis 为例):
 ```markdown
-# 案例 #2024-0815:内存泄漏致 OOM
+# 案例:Redis 内存膨胀触发 OOM 驱逐(PaaS → IaaS 跨层)
 
 ## 背景
-order-service 频繁 OOMKilled,5 分钟内重启 12 次
+hw-redis 实例偶发读写失败,业务侧缓存命中率突降
 
 ## 现象
-- Pod 内存从 200Mi 涨到 512Mi(limit)
-- GC 日志: Full GC 每分钟 8 次
-- 节点内存使用率 95%
+- redis_memory_used_bytes 持续上涨,逼近主机内存上限
+- redis_memory_max_bytes = 0(未设 maxmemory,无上限)
+- redis_memory_used_rss_bytes > used(碎片率高)
+- 主机 node_memory_MemAvailable_bytes 持续下降(IaaS 层)
 
 ## 根因
-应用层 HashMap 缓存未设置上限,持续增长导致堆内存耗尽
+未设 maxmemory(=0),某大 key 无过期时间持续膨胀,RSS 吃光主机内存被 OOM killer 杀
 
 ## 处置
-- 短期: limit 提到 1Gi
-- 长期: 改用 Caffeine 缓存 + 最大容量限制
+- 短期: 设 maxmemory + eviction-policy=allkeys-lru
+- 长期: 大 key 拆分 + 加过期时间 + 监控内存碎片率
 ```
 
 **切分**:每个案例整体作为一块(`chunk_size=1500`),不要切碎(案例要完整才能匹配)。
