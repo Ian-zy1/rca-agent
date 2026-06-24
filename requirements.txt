@@ -1,0 +1,27 @@
+# RCA Agent Python 依赖
+# 安装：pip install -r requirements.txt
+# 注：D2 仅锁定当前已用依赖；D3-D6 待装项在底部注释
+
+# ─── 核心（D1-D2 已装并验证）───
+openai==2.43.0
+pydantic==2.13.4
+PyYAML==6.0.3
+python-dotenv==1.2.2
+requests==2.34.2
+urllib3==2.7.0
+
+# ─── Agent 编排（D5 LangGraph 工作流用）───
+langchain==1.3.11
+langchain-core==1.4.8
+langgraph==1.2.6
+
+# ─── D3 待装（Prometheus 查询）───
+# prometheus-api-client==0.5.5  # 或直接用 requests 调 /api/v1（已在用，倾向后者）
+
+# ─── D4 待装（向量检索 RAG）───
+# chromadb==0.5.23
+
+# ─── D6 待装（API + 前端）───
+# fastapi==0.115.6
+# uvicorn==0.34.0
+# gradio==5.9.1
