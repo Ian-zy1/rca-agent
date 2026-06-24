@@ -1,0 +1,180 @@
+# =============================================================================
+# topology.yaml — RCA Agent 拓扑定义（D2 产物）
+# 基于真实 VictoriaMetrics Cluster 标签手写，所有 instance / IP / 标签 / cluster
+# 均已通过 VM /series 与 /query 验证，禁止虚构。
+# 真实后端: https://10.3.240.48:18481/select/0/prometheus/api/v1
+# 真实环境: 传统基础设施（MySQL / Redis / ES 主机），无 K8s 容器监控（container_* = 0）
+# 消费方: 节点3「拓扑关联」反查 instance→service；节点4「指标分析」读 metrics.PromQL→查 VM
+# =============================================================================
+
+# ──────────────── 顶层元信息 ────────────────
+meta:
+  version: "1.0"
+  generated_at: "2026-06-24"           # D2
+  backend: "victoria-metrics-cluster"
+  backend_url_pattern: "https://10.3.240.48:18481/select/0/prometheus/api/v1"
+  env_note: "传统基础设施，无 K8s / 容器监控"
+  # 真实标签 schema（VM series 实测）
+  label_schema:
+    instance: "host:port 主键（MySQL/Redis/Node exporter 均用）"
+    ip: "主机或逻辑 IP（Redis 为逻辑名 hw-redis，ES 为 hw-es）"
+    identifier: "业务标识符（VM 真实标签）"
+    sysId: "系统标识符（VM 真实标签）"
+    cluster: "ES 集群名，仅 ES 使用（heimdall-es）"
+    host: "主机名（仅 ES 出现，值 hw-es）"
+    name: "节点名（仅 ES 出现，值 es-node）"
+    job: "exporter 采集任务名（exporter_addrs / exporter_addrs_auth）"
+
+# =============================================================================
+# IaaS 层：物理/虚拟主机（node_exporter 采集主机指标）
+# =============================================================================
+hosts:
+  host-mysql-01:                        # MySQL 专用主机
+    ip: "10.3.240.116"                  # 真实
+    node_exporter: "10.3.240.116:19100" # 真实 node_exporter instance
+    mem_total_bytes: 16546467840        # ≈15.4GB（真实，node_memory_MemTotal_bytes）
+    role: mysql
+    metrics:
+      cpu_usage: '100 - avg(rate(node_cpu_seconds_total{instance="10.3.240.116:19100",mode="idle"}[5m])) * 100'
+      mem_avail_bytes: 'node_memory_MemAvailable_bytes{instance="10.3.240.116:19100"}'
+      mem_total_bytes: 'node_memory_MemTotal_bytes{instance="10.3.240.116:19100"}'
+      mem_usage_ratio: '1 - (node_memory_MemAvailable_bytes{instance="10.3.240.116:19100"} / node_memory_MemTotal_bytes{instance="10.3.240.116:19100"})'
+      disk_io_util: 'rate(node_disk_io_time_seconds_total{instance="10.3.240.116:19100"}[5m])'
+
+  host-infra-01:                        # Redis + ES 共用主机
+    ip: "10.3.240.48"                   # 真实（Redis/ES/VM 共用）
+    node_exporter: "10.3.240.48:19011"  # 真实 node_exporter instance
+    mem_total_bytes: 33457881088        # ≈31.2GB（真实）
+    role: mixed                         # 同时承载 Redis 与 ES
+    metrics:
+      cpu_usage: '100 - avg(rate(node_cpu_seconds_total{instance="10.3.240.48:19011",mode="idle"}[5m])) * 100'
+      mem_avail_bytes: 'node_memory_MemAvailable_bytes{instance="10.3.240.48:19011"}'
+      mem_total_bytes: 'node_memory_MemTotal_bytes{instance="10.3.240.48:19011"}'
+      mem_usage_ratio: '1 - (node_memory_MemAvailable_bytes{instance="10.3.240.48:19011"} / node_memory_MemTotal_bytes{instance="10.3.240.48:19011"})'
+      disk_io_util: 'rate(node_disk_io_time_seconds_total{instance="10.3.240.48:19011"}[5m])'
+
+# =============================================================================
+# PaaS 层：MySQL / Redis / ES 实例
+# type 值必须与 models.py ResourceType 枚举 value 严格对齐：
+#   mysql / redis / elasticsearch
+# layer 值必须与 models.py Layer 枚举 value 严格对齐：iaas / paas / saas
+# =============================================================================
+services:
+
+  # ──────────────── MySQL（场景1：慢查询 → 行锁竞争）────────────────
+  mysql-prod-56:                        # identifier=56
+    layer: paas
+    type: mysql                         # ↔ ResourceType.MYSQL
+    instance: "10.3.240.116:19211"      # 真实
+    port: 19211
+    runs_on: host-mysql-01
+    labels:                             # 完整真实 VM 标签
+      ip: "10.3.240.116"
+      identifier: "56"
+      sysId: "20"
+      job: "exporter_addrs_auth"
+    metrics:
+      threads_running:     'mysql_global_status_threads_running{instance="10.3.240.116:19211"}'
+      threads_connected:   'mysql_global_status_threads_connected{instance="10.3.240.116:19211"}'
+      slow_queries_rate:   'rate(mysql_global_status_slow_queries{instance="10.3.240.116:19211"}[5m])'
+      row_lock_waits_rate: 'rate(mysql_global_status_innodb_row_lock_waits{instance="10.3.240.116:19211"}[5m])'
+      buffer_pool_dirty:   'mysql_global_status_buffer_pool_dirty_pages{instance="10.3.240.116:19211"}'
+      # 缓存命中率复合公式：hits / (hits+reads) * 100（buffer_pool_pages_total 无数据，故用此式）
+      buffer_pool_hit_rate: '100 * sum(rate(mysql_global_status_buffer_pool_hits{instance="10.3.240.116:19211"}[5m])) / (sum(rate(mysql_global_status_buffer_pool_hits{instance="10.3.240.116:19211"}[5m])) + sum(rate(mysql_global_status_buffer_pool_reads{instance="10.3.240.116:19211"}[5m])))'
+    thresholds:                          # 指标分析节点据此判定异常
+      threads_running_max: 30
+      threads_connected_max: 500
+      slow_queries_rate_max: 1           # /s
+      row_lock_waits_rate_max: 1         # /s
+      buffer_pool_hit_rate_min: 95       # %，低于此视为缓存问题
+    failure_modes:
+      - id: FM-MYSQL-LOCK-CONTENTION
+        pattern: "slow_queries_rate↑ + row_lock_waits_rate↑ + buffer_pool_hit_rate>99%"
+        root_cause_hint: "行锁竞争（大事务未提交 / 缺二级索引），非内存问题、非缓存 miss"
+        recommendations:
+          - "【紧急】定位长事务并 kill（information_schema.innodb_trx）"
+          - "【短期】为高频查询字段加二级索引，缩小行锁覆盖范围"
+          - "【长期】监控 innodb_row_lock_waits 告警阈值（>1/s 即告警）"
+      - id: FM-MYSQL-CONN-EXHAUST
+        pattern: "threads_connected 接近 max_connections + Aborted_connects↑ + threads_running↑"
+        root_cause_hint: "连接池耗尽（应用泄漏连接或慢 SQL 堆积致连接不释放）"
+        recommendations:
+          - "【紧急】提高 max_connections 临时缓解或重启泄漏应用"
+          - "【短期】排查应用连接池配置（最大连接数 / 空闲回收）"
+          - "【长期】接入慢 SQL 治理，避免连接被慢查询长期占用"
+
+  # ──────────────── Redis（场景2：内存 → OOM，maxmemory=0 为根因核心）────────────────
+  redis-prod-4:                         # identifier=4
+    layer: paas
+    type: redis                         # ↔ ResourceType.REDIS
+    instance: "hw-agent:19213"          # 真实（聚合代理上报）
+    port: 19213
+    runs_on: host-infra-01
+    labels:                             # 完整真实 VM 标签
+      ip: "hw-redis"                    # 逻辑名，非 IP
+      identifier: "4"
+      sysId: "1"
+      job: "exporter_addrs"
+    config_flags:                       # 关键配置（直接影响 RCA 判断）
+      maxmemory: 0                      # ⚠️ 真实未设上限（redis_memory_max_bytes=0）
+      maxmemory_policy: "noeviction"    # 默认策略
+    metrics:
+      memory_used:       'redis_memory_used_bytes{instance="hw-agent:19213"}'
+      memory_used_rss:   'redis_memory_used_rss_bytes{instance="hw-agent:19213"}'
+      memory_max:        'redis_memory_max_bytes{instance="hw-agent:19213"}'
+      memory_peak:       'redis_memory_used_peak_bytes{instance="hw-agent:19213"}'
+      connected_clients: 'redis_connected_clients{instance="hw-agent:19213"}'
+      evicted_keys_rate: 'rate(redis_evicted_keys_total{instance="hw-agent:19213"}[5m])'
+    thresholds:
+      # maxmemory=0 时无逻辑上限，故用 RSS 占主机内存比例作为主判据
+      rss_to_host_mem_ratio_max: 0.85   # RSS / host.mem_total_bytes（host-infra-01 ≈31.2GB）
+      connected_clients_max: 200
+      mem_fragmentation_ratio_max: 1.5  # rss / used，过高表示碎片
+    failure_modes:
+      - id: FM-REDIS-OOM-RSS
+        pattern: "memory_used_rss 接近主机物理内存 + maxmemory=0 + evicted_keys_rate=0"
+        root_cause_hint: "未设 maxmemory，Redis RSS 触达主机物理内存上限，被内核 OOM Killer 杀"
+        recommendations:
+          - "【紧急】立即 CONFIG SET maxmemory 6gb，防止 RSS 再次触顶"
+          - "【短期】配置 maxmemory-policy allkeys-lru，允许淘汰冷 key"
+          - "【长期】迁移 redis-prod-4 到独立主机，避免与 ES 等进程争抢物理内存"
+
+  # ──────────────── Elasticsearch（场景3：JVM 堆 → 泄漏）────────────────
+  es-heimdall:                          # cluster=heimdall-es（ES 用 cluster 标签做主键）
+    layer: paas
+    type: elasticsearch                 # ↔ ResourceType.ELASTICSEARCH
+    instance: "hw-agent:19212"          # 真实
+    cluster: "heimdall-es"              # ⚠️ ES 关键聚合键（非 instance）
+    runs_on: host-infra-01
+    labels:                             # 完整真实 VM 标签
+      ip: "hw-es"
+      host: "hw-es"
+      name: "es-node"
+      identifier: "3"
+      sysId: "1"
+    nodes:                              # 集群含 2 节点（真实）
+      - identifier: "3"
+        ip: "hw-es"
+      - identifier: "49"
+        ip: "10.3.240.48"
+    metrics:
+      jvm_heap_used:         'elasticsearch_jvm_memory_used_bytes{cluster="heimdall-es",area="heap"}'
+      jvm_heap_max:          'elasticsearch_jvm_memory_max_bytes{cluster="heimdall-es",area="heap"}'
+      gc_old_rate:           'rate(elasticsearch_jvm_gc_collection_seconds_count{cluster="heimdall-es",gc="old"}[5m])'
+      gc_young_count:        'elasticsearch_jvm_gc_collection_seconds_count{cluster="heimdall-es",gc="young"}'
+      cluster_status_green:  'elasticsearch_cluster_health_status{cluster="heimdall-es",color="green"}'
+      cluster_status_yellow: 'elasticsearch_cluster_health_status{cluster="heimdall-es",color="yellow"}'
+      # 注: elasticsearch_thread_pool_queue_size 在真实 VM 中不存在，故改用 rejected_count
+      thread_pool_rejected:  'elasticsearch_thread_pool_rejected_count{cluster="heimdall-es",type="search"}'
+    thresholds:
+      heap_usage_ratio_max: 0.85        # jvm_heap_used / jvm_heap_max
+      gc_old_rate_max: 0.5              # /s，Full GC 频率
+      thread_pool_rejected_max: 0       # 任何拒绝都异常
+    failure_modes:
+      - id: FM-ES-HEAP-LEAK
+        pattern: "jvm_heap_used 接近 jvm_heap_max + gc_old_rate↑ + heap 持续不回落"
+        root_cause_hint: "JVM 堆泄漏（dynamic_mapping 致字段数爆炸 / 聚合桶未释放）"
+        recommendations:
+          - "【紧急】滚动重启 ES 节点临时释放堆（避免分片丢失）"
+          - "【短期】禁用 dynamic_mapping，显式定义 mapping 防字段爆炸"
+          - "【长期】限制 aggregation buckets 数量（search.max_buckets）+ 监控 heap 趋势告警"
