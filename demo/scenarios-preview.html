@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCA 场景预演 · topology.yaml 真实数据预演</title>
+<style>
+  /* ================================================================
+     玻璃拟态设计令牌 (Glassmorphism Design Tokens)
+     中等明度渐变 + backdrop-filter blur + 白色半透明叠加
+     ================================================================ */
+  :root{
+    /* 文字色阶 (白底深色系) */
+    --text:#0f172a;         /* slate-900 主文字 */
+    --text-2:#475569;       /* slate-600 辅助文字 */
+    --text-3:#94a3b8;       /* slate-400 三要文字 */
+
+    /* 状态色映射 (白底可读) */
+    --green:#10b981;        /* 健康/当前值 */
+    --red:#ef4444;          /* 故障/告警 */
+    --amber:#f59e0b;        /* 警告/链接 */
+    --cyan:#06b6d4;         /* active/推理中 */
+    --blue:#3b82f6;         /* 主操作 */
+    --purple:#8b5cf6;       /* 层级 badge / 根因 */
+
+    /* 玻璃材质 (白底高不透明度磨砂) */
+    --glass-bg:rgba(255,255,255,0.65);
+    --glass-bg-2:rgba(255,255,255,0.50);
+    --glass-bg-3:rgba(255,255,255,0.80);
+    --glass-border:rgba(148,163,184,0.25);   /* slate-400 半透明 */
+    --glass-border-hi:rgba(59,130,246,0.35); /* 蓝色高光 */
+    --glass-blur:blur(20px) saturate(180%);
+    --glass-shadow:0 8px 32px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04);
+    --glass-radius:16px;
+    --glass-radius-sm:10px;
+
+    /* 终端/代码块 (保持深色锚点) */
+    --code-bg:#0f172a;
+    --code-border:rgba(15,23,42,0.15);
+    --code-bg-light:rgba(15,23,42,0.04);    /* 指标卡内 PromQL 轻底 */
+    --code-border-light:rgba(15,23,42,0.10);
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+
+  html,body{height:100%}
+
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;
+    /* 极浅灰渐变背景 (白底玻璃质感基底) */
+    background:
+      linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%);
+    background-attachment:fixed;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* === 装饰性光斑 (atmosphere blobs) === */
+  .blob{position:fixed;border-radius:50%;filter:blur(100px);pointer-events:none;z-index:0}
+  .blob-1{top:-8%;left:-5%;width:480px;height:480px;background:radial-gradient(circle,rgba(167,139,250,0.40),transparent 70%);opacity:0.20}
+  .blob-2{bottom:-12%;right:-8%;width:560px;height:560px;background:radial-gradient(circle,rgba(6,182,212,0.30),transparent 70%);opacity:0.18}
+  .blob-3{top:45%;left:48%;width:400px;height:400px;background:radial-gradient(circle,rgba(59,130,246,0.25),transparent 70%);opacity:0.22}
+
+  /* 所有内容层在光斑之上 */
+  .topbar,.hero,.preview-grid,.mock-banner{position:relative;z-index:1}
+
+  /* ================================================================
+     Topbar (玻璃质感)
+     ================================================================ */
+  .topbar{
+    background:var(--glass-bg);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    border-bottom:1px solid var(--glass-border);
+    padding:14px 28px;
+    display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:100;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand-logo{
+    width:38px;height:38px;
+    background:linear-gradient(135deg,var(--blue),var(--cyan));
+    border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:20px;font-weight:700;color:#fff;
+    box-shadow:0 4px 16px rgba(59,130,246,0.35);
+  }
+  .brand h1{font-size:17px;font-weight:600}
+  .brand small{display:block;color:var(--text-3);font-size:11px;font-weight:400;margin-top:2px}
+  .pill{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;color:var(--text-2);margin-left:6px;background:rgba(148,163,184,0.15)}
+
+  .scene-tabs{display:flex;gap:8px}
+  .scene-tab{
+    background:var(--glass-bg-2);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);color:var(--text-2);
+    padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;
+    transition:all .25s ease;
+  }
+  .scene-tab:hover{border-color:var(--glass-border-hi);background:var(--glass-bg);color:var(--text)}
+  .scene-tab.active{
+    background:linear-gradient(135deg,rgba(59,130,246,0.90),rgba(6,182,212,0.80));
+    border-color:rgba(59,130,246,0.5);color:#fff;
+    box-shadow:0 4px 16px rgba(59,130,246,0.25);
+  }
+
+  /* ================================================================
+     Hero (环境元信息 + 真实数据预演 banner)
+     ================================================================ */
+  .hero{
+    padding:18px 28px 0;
+    display:flex;gap:16px;align-items:stretch;
+  }
+  .env-meta{
+    flex:1;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    background:var(--glass-bg);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    border-radius:var(--glass-radius);
+    padding:12px 16px;
+    box-shadow:var(--glass-shadow);
+  }
+  .env-meta-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-3)}
+  .env-meta-item b{color:var(--text-2);font-weight:600}
+  .env-meta-item .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan)}
+  .env-meta-item .dot.green{background:var(--green)}
+  .env-meta-sep{width:1px;height:14px;background:var(--glass-border)}
+
+  /* 真实数据预演 banner */
+  .real-banner{
+    display:flex;align-items:center;gap:10px;
+    background:rgba(59,130,246,0.10);
+    border:1px solid rgba(59,130,246,0.25);
+    border-radius:var(--glass-radius);
+    padding:10px 16px;
+    box-shadow:var(--glass-shadow);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    white-space:nowrap;
+  }
+  .banner-tag{
+    background:linear-gradient(135deg,var(--green),var(--cyan));color:#fff;
+    font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;letter-spacing:.4px;
+  }
+  .real-banner .b-text{font-size:12px;color:#1e40af;line-height:1.4}
+  .real-banner .b-text b{color:#1e3a8a}
+  .real-banner .b-sub{font-size:11px;color:var(--text-3);margin-left:4px}
+
+  /* ================================================================
+     Main Layout
+     ================================================================ */
+  .preview-grid{
+    display:grid;grid-template-columns:1fr 480px;gap:16px;
+    padding:16px 28px 24px;
+    height:calc(100vh - 67px - 72px);
+  }
+
+  .panel{
+    background:var(--glass-bg);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    border-radius:var(--glass-radius);
+    box-shadow:var(--glass-shadow);
+    display:flex;flex-direction:column;overflow:hidden;
+    transition:border-color .25s ease,background .25s ease;
+  }
+  .panel:hover{border-color:var(--glass-border-hi)}
+
+  .panel-header{
+    padding:13px 18px;border-bottom:1px solid var(--glass-border);
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--glass-bg-2);
+  }
+  .panel-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .panel-sub{font-size:11px;color:var(--text-3);font-weight:400}
+  .panel-body{flex:1;overflow-y:auto;padding:14px 16px}
+
+  /* ================================================================
+     Flow Steps (7 步时间线)
+     ================================================================ */
+  .flow-step{
+    background:var(--glass-bg);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);
+    border-radius:var(--glass-radius-sm);
+    margin-bottom:12px;overflow:hidden;
+    animation:stepIn .5s cubic-bezier(.2,.7,.3,1) backwards;
+    transition:border-color .25s ease,background .25s ease;
+  }
+  .flow-step:hover{border-color:var(--glass-border-hi);background:var(--glass-bg-3)}
+  @keyframes stepIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+  .fs-head{
+    display:flex;align-items:center;gap:10px;padding:11px 14px;
+    border-bottom:1px solid var(--glass-border);
+  }
+  .step-num{
+    width:26px;height:26px;border-radius:50%;
+    background:linear-gradient(135deg,var(--blue),var(--cyan));color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;
+    box-shadow:0 2px 8px rgba(59,130,246,0.3);
+  }
+  .fs-title{font-size:13px;font-weight:600;flex:1}
+  .fs-node{
+    font-size:10px;color:var(--text-3);background:rgba(148,163,184,0.12);
+    padding:2px 7px;border-radius:4px;
+    font-family:"SF Mono",Consolas,Monaco,monospace;
+  }
+  .fs-status{font-size:11px;font-weight:600;color:var(--green);display:flex;align-items:center;gap:4px}
+  .fs-body{padding:12px 14px}
+
+  /* highlight tokens (token 级颜色，沿用 index.html) */
+  .hl-k{color:#7dd3fc}
+  .hl-v{color:#86efac}
+  .hl-w{color:#fcd34d}
+  .hl-e{color:#fca5a5}
+  .hl-c{color:#64748b}
+  .hl-p{color:#c4b5fd}
+
+  /* ================================================================
+     Step 1 · 触发
+     ================================================================ */
+  .trig-row{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px;flex-wrap:wrap}
+  .trig-key{color:var(--text-3);min-width:90px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:11px}
+  .trig-val{color:var(--text-2)}
+  .trig-quote{
+    background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-left:3px solid var(--cyan);
+    border-radius:6px;padding:10px 14px;font-size:13px;color:var(--text);margin-top:4px;line-height:1.5;
+  }
+  .trig-quote .who{color:var(--cyan);font-weight:600}
+  .topo-note{
+    font-size:11px;color:var(--text-2);margin-top:8px;padding:7px 11px;
+    background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.18);border-radius:6px;line-height:1.5;
+  }
+
+  /* ================================================================
+     Step 2 · 拓扑关联
+     ================================================================ */
+  .topo-chain{display:flex;flex-direction:column;gap:6px;font-size:12px}
+  .topo-line{
+    display:flex;align-items:center;gap:8px;padding:7px 11px;
+    background:rgba(241,245,249,0.60);border-radius:6px;border-left:3px solid var(--blue);
+  }
+  .topo-line .lvl{
+    font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;
+  }
+  .lvl-iaas{background:rgba(148,163,184,0.25);color:#475569}
+  .lvl-paas{background:rgba(139,92,246,0.20);color:#6d28d9}
+  .topo-arrow{color:var(--text-3);font-size:11px;padding-left:16px;font-family:"SF Mono",Consolas,Monaco,monospace}
+
+  /* ================================================================
+     Step 3 · 指标分析 (双值并列卡片 - 核心设计)
+     ================================================================ */
+  .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .metric-card{
+    background:rgba(255,255,255,0.60);
+    border:1px solid var(--glass-border);
+    border-radius:8px;padding:10px 12px;
+    animation:metricIn .4s ease backwards;
+    transition:border-color .2s,background .2s;
+  }
+  .metric-card:hover{border-color:var(--glass-border-hi);background:rgba(255,255,255,0.80)}
+  @keyframes metricIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+  .m-query{
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:9.5px;color:var(--text-3);
+    margin-bottom:8px;word-break:break-all;line-height:1.4;
+    background:var(--code-bg-light);border:1px solid var(--code-border-light);
+    padding:4px 6px;border-radius:4px;
+  }
+  /* 双值并列容器 */
+  .m-dual{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+  .m-real{
+    background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);
+    border-radius:6px;padding:7px 8px;text-align:center;
+  }
+  .m-fault{
+    background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.30);
+    border-radius:6px;padding:7px 8px;text-align:center;
+    animation:faultPulse 2.8s ease-in-out infinite;
+  }
+  @keyframes faultPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 12px 0 rgba(239,68,68,0.18)}}
+
+  .m-label{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;font-weight:600}
+  .m-real .m-label{color:#059669}
+  .m-fault .m-label{color:#dc2626}
+  .m-val{font-size:22px;font-weight:700;font-family:"SF Mono",Consolas,Monaco,monospace;line-height:1}
+  .m-real .m-val{color:#047857}
+  .m-fault .m-val{color:#b91c1c}
+  .m-val .unit{font-size:11px;font-weight:500;opacity:.8;margin-left:1px}
+  .m-sep{color:#64748b;font-size:16px;font-weight:300}
+  .m-threshold{
+    font-size:10px;color:var(--text-3);margin-top:7px;padding-top:6px;
+    border-top:1px solid var(--glass-border);
+    display:flex;align-items:center;gap:5px;
+  }
+  .m-threshold .th-tag{color:var(--amber);font-weight:600}
+  .metric-note{
+    grid-column:1/-1;font-size:11px;color:#92400e;
+    background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.25);
+    border-radius:6px;padding:8px 10px;line-height:1.5;
+  }
+
+  /* ================================================================
+     Step 4 · 日志分析
+     ================================================================ */
+  .log-block{
+    background:var(--code-bg);border:1px solid var(--code-border);border-radius:6px;padding:10px 12px;
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:11px;line-height:1.7;color:var(--text-3);
+    margin-bottom:8px;
+  }
+  .log-block .src{color:var(--cyan);font-size:10px;display:block;margin-bottom:4px}
+  .log-line{display:block;padding:1px 0}
+  .log-line.err{color:#fca5a5}
+  .log-line.warn{color:#fcd34d}
+
+  /* ================================================================
+     Step 5 · 案例检索
+     ================================================================ */
+  .case-hit{
+    background:rgba(16,185,129,0.08);border-left:2px solid var(--green);
+    border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.6;
+  }
+  .case-hit .cid{color:#047857;font-weight:600;font-family:"SF Mono",Consolas,Monaco,monospace}
+  .case-score{
+    display:inline-block;background:rgba(16,185,129,0.15);color:#047857;
+    font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;margin-left:4px;
+  }
+
+  /* ================================================================
+     Step 6 · 根因推断
+     ================================================================ */
+  .rc-verdict{
+    background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(139,92,246,0.10));
+    border:1px solid rgba(139,92,246,0.30);border-radius:8px;padding:12px 14px;margin-bottom:10px;
+  }
+  .rc-label{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+  .rc-text{font-size:14px;font-weight:600;line-height:1.5;color:#6d28d9}
+  .rc-text .neg{color:var(--text-3);font-weight:400;font-size:12px}
+  .rc-evidence{font-size:11px;color:var(--text-2);line-height:1.8}
+  .rc-evidence .ev-num{color:var(--cyan);font-family:"SF Mono",Consolas,Monaco,monospace}
+
+  /* ================================================================
+     Step 7 · 报告
+     ================================================================ */
+  .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+  .badge-critical{background:rgba(239,68,68,0.12);color:#b91c1c}
+  .badge-warning{background:rgba(245,158,11,0.12);color:#b45309}
+  .badge-success{background:rgba(16,185,129,0.12);color:#047857}
+  .rep-summary{font-size:13px;font-weight:600;line-height:1.5;margin-bottom:8px}
+  .rep-section{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px}
+  .confidence-bar{height:6px;background:rgba(15,23,42,0.08);border-radius:3px;overflow:hidden;margin-top:6px}
+  .confidence-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:3px;width:0;transition:width 1s ease-out}
+  .rep-list{list-style:none;padding-left:0}
+  .rep-list li{font-size:11px;padding:3px 0 3px 14px;position:relative;line-height:1.5;color:var(--text-2)}
+  .rep-list li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--blue)}
+  .rec-item{
+    background:rgba(16,185,129,0.06);border-left:2px solid var(--green);
+    padding:7px 10px;border-radius:4px;margin-bottom:6px;font-size:11px;line-height:1.5;color:var(--text-2);
+  }
+  .grafana-link{
+    display:inline-flex;align-items:center;gap:5px;
+    background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.25);
+    color:#b45309;padding:5px 10px;border-radius:5px;font-size:11px;text-decoration:none;
+    margin:3px 3px 0 0;transition:all .2s;
+  }
+  .grafana-link:hover{background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.4)}
+
+  /* ================================================================
+     Topology YAML Panel (右侧固定)
+     ================================================================ */
+  .terminal-head{display:flex;align-items:center;gap:6px;padding:9px 14px;background:var(--code-bg);border-bottom:1px solid var(--code-border)}
+  .term-dot{width:11px;height:11px;border-radius:50%}
+  .term-fname{font-family:"SF Mono",Consolas,Monaco,monospace;font-size:11px;color:#94a3b8;margin-left:8px}
+  .yaml-pre{
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:11px;line-height:1.75;
+    background:var(--code-bg);color:#e2e8f0;padding:14px;white-space:pre;overflow-x:auto;margin:0;flex:1;
+  }
+  .yaml-pre .svc-active{background:rgba(59,130,246,0.22);border-radius:3px;display:inline-block;width:calc(100% - 0px)}
+  .yaml-consumer{
+    font-size:10px;color:var(--text-3);padding:7px 14px;
+    background:var(--glass-bg-2);border-top:1px solid var(--glass-border);
+    display:flex;align-items:center;gap:6px;line-height:1.5;
+  }
+  .yaml-consumer code{font-family:"SF Mono",Consolas,Monaco,monospace;color:var(--cyan)}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:7px;height:7px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(15,23,42,0.12);border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(15,23,42,0.20)}
+
+  .check{color:var(--green)}
+
+  /* 数据真实性标注 */
+  .data-tag{
+    display:inline-block;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;
+    margin-left:4px;letter-spacing:.3px;vertical-align:middle;
+  }
+  .data-real{background:rgba(16,185,129,0.15);color:#047857}
+  .data-mock{background:rgba(239,68,68,0.12);color:#b91c1c}
+</style>
+</head>
+<body>
+
+<!-- 装饰光斑 -->
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">R</div>
+    <div>
+      <h1>RCA 场景预演 <span class="pill" style="background:rgba(16,185,129,0.15);color:#047857">真实数据 · topology 预演</span></h1>
+      <small>topology.yaml 写完后 3 个真实场景的预期 RCA 推理效果 · 基于 VictoriaMetrics 真实标签验证</small>
+    </div>
+  </div>
+  <div class="scene-tabs">
+    <div class="scene-tab active" data-scene="0">场景1: MySQL 慢查询</div>
+    <div class="scene-tab" data-scene="1">场景2: Redis OOM</div>
+    <div class="scene-tab" data-scene="2">场景3: ES JVM 泄漏</div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="env-meta">
+    <div class="env-meta-item"><span class="dot green"></span> <b>VictoriaMetrics Cluster</b></div>
+    <div class="env-meta-sep"></div>
+    <div class="env-meta-item"><b>17</b> 个真实 instance</div>
+    <div class="env-meta-sep"></div>
+    <div class="env-meta-item"><b>mysql</b> 721 / <b>redis</b> 177 / <b>es</b> 231 / <b>node</b> 304 metrics</div>
+    <div class="env-meta-sep"></div>
+    <div class="env-meta-item"><span class="dot"></span> 无 K8s 容器监控 (container_* = 0)</div>
+  </div>
+  <div class="real-banner">
+    <span class="banner-tag">真实数据预演</span>
+    <span class="b-text"><b>当前环境健康</b> · 故障数值为模拟注入</span>
+    <span class="b-sub">指标/日志/案例为预置 mock，PromQL 与标签全部真实</span>
+  </div>
+</div>
+
+<div class="preview-grid">
+  <!-- 左侧: RCA 推理工作流 -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">RCA 推理工作流 · <span id="flowSceneName">MySQL 慢查询 → 行锁竞争</span></div>
+      <span class="panel-sub" id="flowSub">LangGraph 8 节点 · 展示关键 7 步</span>
+    </div>
+    <div class="panel-body" id="flowBody"></div>
+  </div>
+
+  <!-- 右侧: topology.yaml 固定展示 -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">topology.yaml 片段</div>
+      <span class="panel-sub">节点3 / 节点4 消费</span>
+    </div>
+    <div class="terminal-head">
+      <div class="term-dot" style="background:#ef4444"></div>
+      <div class="term-dot" style="background:#f59e0b"></div>
+      <div class="term-dot" style="background:#10b981"></div>
+      <span class="term-fname">topology.yaml — <span id="yamlScope">mysql-prod-56</span></span>
+    </div>
+    <pre class="yaml-pre" id="yamlPre"></pre>
+    <div class="yaml-consumer">
+      消费方：<code>节点3 拓扑关联</code> 反查 instance → 命中 service；<code>节点4 指标分析</code> 读 metrics.PromQL → 查 VictoriaMetrics
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// 场景数据 · 全部基于真实 VictoriaMetrics API 抓取验证
+// instance / 标签 / PromQL 真实，故障值为模拟注入
+// ================================================================
+const SCENES = [
+  // ───────────── 场景 1: MySQL 慢查询 → 行锁竞争 ─────────────
+  {
+    id:'mysql', name:'MySQL 慢查询 → 行锁竞争',
+    trigger:{
+      type:'alert',
+      alertname:'MySQLSlowQueries',
+      instance:'10.3.240.116:19211',
+      labels:'ip=10.3.240.116, identifier=56, sysId=20, job=exporter_addrs_auth',
+      severity:'critical',
+      source:'Alertmanager webhook',
+      startsAt:'2025-06-24 10:30:12'
+    },
+    topology:{
+      chain:[
+        {lvl:'paas', name:'mysql-prod-56', tag:'identifier=56', note:'instance 反查命中'},
+        {arrow:'runs_on'},
+        {lvl:'iaas', name:'host-mysql-01', tag:'ip=10.3.240.116', note:'node exporter 10.3.240.116:19100 · 16GB'}
+      ],
+      note:'反查 instance 标签 → PaaS service mysql-prod-56 → IaaS host-mysql-01，无下游业务依赖。'
+    },
+    metrics:[
+      {q:'mysql_global_status_threads_running\n{instance="10.3.240.116:19211"}', real:'2', fault:'87', threshold:'正常 < 30'},
+      {q:'mysql_global_status_threads_connected\n{instance="10.3.240.116:19211"}', real:'103', fault:'280', threshold:'会话堆积'},
+      {q:'rate(mysql_global_status_slow_queries[5m])', real:'0', realUnit:'/s', fault:'42.3', faultUnit:'/s', threshold:'正常 < 1/s'},
+      {q:'rate(mysql_global_status_innodb_row_lock_waits[5m])', real:'0.3', realUnit:'/s', fault:'18.7', faultUnit:'/s', threshold:'正常 < 0.1/s'},
+      {q:'mysql_global_status_buffer_pool_dirty_pages', real:'72', fault:'1280', threshold:'脏页过多'},
+      {q:'buffer_pool_hit_rate\n= hits / (hits+reads)', real:'N/A', realNote:'当前无数据', fault:'99.97', faultUnit:'%', threshold:'关键证据', note:'缓存命中却慢 → 非缺索引致缓存 miss，排除「索引缺失」方向。'}
+    ],
+    logs:[
+      {src:'Loki LogQL · {instance="10.3.240.116:19211"}', lines:[
+        {t:'warn', txt:'InnoDB: Warning: lock wait timeout exceeded; try restarting transaction'},
+        {t:'warn', txt:'Transaction was aborted due to deadlock'}
+      ]}
+    ],
+    case:{id:'#2024-0815', desc:'大事务未提交导致行锁', score:'0.90', action:'定位长事务 kill + 为 order_items.order_id 加索引'},
+    rootCause:{
+      verdict:'行锁竞争（大事务 / 缺二级索引）',
+      neg:'非内存问题、非缓存 miss',
+      reasoning:[
+        '<span class="ev-num">threads_running=87</span> 远超阈值 30，并发会话堆积',
+        '<span class="ev-num">innodb_row_lock_waits=18.7/s</span> 极高，行锁等待是直接症状',
+        '<span class="ev-num">buffer_pool_hit=99.97%</span> 命中率正常 → 排除缓存 miss / 缺索引致全表扫描',
+        '日志出现 <span class="ev-num">lock wait timeout / deadlock</span> → 锁竞争实锤'
+      ]
+    },
+    report:{
+      severity:'P1 严重', confidence:91,
+      summary:'mysql-prod-56 行锁竞争：大事务未提交致 innodb 行锁等待 18.7/s，拖慢所有订单写入。',
+      affected:['mysql-prod-56 (PaaS · 10.3.240.116:19211)','host-mysql-01 (IaaS · 10.3.240.116)'],
+      evidence:[
+        'threads_running: 当前 2 → <b style="color:#b91c1c">故障 87</b> (阈值 <30)',
+        'innodb_row_lock_waits: 当前 0.3/s → <b style="color:#b91c1c">故障 18.7/s</b>',
+        'buffer_pool_hit: 当前 N/A → <b style="color:#b91c1c">故障 99.97%</b> (排除缓存 miss)',
+        '日志: lock wait timeout exceeded / deadlock',
+        '案例: #2024-0815 (相似度 0.90)'
+      ],
+      recs:[
+        '【紧急】定位并 kill 占用行锁的长事务（information_schema.innodb_trx）',
+        '【短期】为 order_items.order_id 增加二级索引，减少行锁覆盖范围',
+        '【长期】监控 innodb_row_lock_waits 告警阈值（>1/s 即告警）'
+      ],
+      grafana:[{label:'MySQL 性能面板', url:'http://10.3.240.48:3000/d/mysql?var-instance=10.3.240.116:19211'}]
+    },
+    yamlName:'mysql-prod-56'
+  },
+
+  // ───────────── 场景 2: Redis 内存 OOM (maxmemory=0 真实) ─────────────
+  {
+    id:'redis', name:'Redis 内存 OOM (maxmemory=0)',
+    trigger:{
+      type:'alert',
+      alertname:'RedisMemoryHigh',
+      instance:'hw-agent:19213',
+      labels:'ip=hw-redis, identifier=4, sysId=1, job=exporter_addrs',
+      severity:'critical',
+      source:'Alertmanager webhook',
+      startsAt:'2025-06-24 11:08:44'
+    },
+    topology:{
+      chain:[
+        {lvl:'paas', name:'redis-prod-4', tag:'identifier=4', note:'instance 反查命中'},
+        {arrow:'runs_on'},
+        {lvl:'iaas', name:'host-redis-01', tag:'ip=10.3.240.48', note:'31.2GB 物理内存'}
+      ],
+      note:'反查 instance → redis-prod-4 → host-redis-01。关键背景：Redis 配置 maxmemory=0（未设上限，真实）。'
+    },
+    metrics:[
+      {q:'redis_memory_used_bytes\n{instance="hw-agent:19213"}', real:'2,112,408', realNote:'≈2MB', fault:'8,388,608,000', faultNote:'≈7.8GB', threshold:'逻辑使用'},
+      {q:'redis_memory_used_rss_bytes\n{instance="hw-agent:19213"}', real:'12,804,096', realNote:'≈12MB', fault:'29,000,000,000', faultNote:'≈27GB', threshold:'触达主机 31GB'},
+      {q:'redis_memory_max_bytes\n{instance="hw-agent:19213"}', real:'0', realNote:'未设上限', fault:'0', faultNote:'仍未设', threshold:'关键：无限制', note:'maxmemory=0 故不触发 eviction，RSS 只增不减直至触顶主机内存。'},
+      {q:'redis_connected_clients\n{instance="hw-agent:19213"}', real:'38', fault:'412', threshold:'连接数飙升'},
+      {q:'rate(redis_evicted_keys_total[5m])', real:'0', realUnit:'/s', fault:'0', faultUnit:'/s', threshold:'因 maxmemory=0 不淘汰'},
+      {q:'redis_memory_used_peak_bytes\n{instance="hw-agent:19213"}', real:'2,922,216', fault:'8,500,000,000', threshold:'峰值持续升'}
+    ],
+    logs:[
+      {src:'Loki LogQL · {instance="hw-agent:19213"}', lines:[
+        {t:'err', txt:"OOM command not allowed when used memory > 'maxmemory' (RSS 触顶)"}
+      ]},
+      {src:'主机 dmesg · 10.3.240.48 (host-redis-01)', lines:[
+        {t:'err', txt:'Out of memory: Killed process 12345 (redis-server)'}
+      ]}
+    ],
+    case:{id:'#2024-0920', desc:'未设 maxmemory 导致 RSS 触顶', score:'0.93', action:'config set maxmemory 6gb + allkeys-lru'},
+    rootCause:{
+      verdict:'未设 maxmemory，Redis RSS 触达主机物理内存上限，被内核 OOM Killer 杀掉',
+      neg:'',
+      reasoning:[
+        '<span class="ev-num">RSS=27GB</span> 接近主机 31.2GB 物理内存上限',
+        '<span class="ev-num">maxmemory=0</span> → 未触发淘汰，内存只增不减',
+        '<span class="ev-num">evicted_keys=0/s</span> 佐证无淘汰机制介入',
+        '主机 dmesg 出现 <span class="ev-num">OOM Killed redis-server</span> → 进程已被内核杀掉'
+      ]
+    },
+    report:{
+      severity:'P1 严重', confidence:93,
+      summary:'redis-prod-4 未配置 maxmemory，RSS 达 27GB 触达主机 31.2GB 物理内存上限，被内核 OOM Killer 杀掉。',
+      affected:['redis-prod-4 (PaaS · hw-agent:19213)','host-redis-01 (IaaS · 10.3.240.48)'],
+      evidence:[
+        'RSS: 当前 12MB → <b style="color:#b91c1c">故障 27GB</b> (主机 31.2GB)',
+        'maxmemory: 当前 <b style="color:#047857">0</b> → <b style="color:#b91c1c">0</b> (始终未设上限)',
+        'evicted_keys: 0/s (maxmemory=0 不触发淘汰)',
+        '日志: OOM command not allowed + dmesg Killed redis-server',
+        '案例: #2024-0920 (相似度 0.93)'
+      ],
+      recs:[
+        '【紧急】立即 CONFIG SET maxmemory 6gb，防止 RSS 再次触顶',
+        '【短期】配置 maxmemory-policy allkeys-lru，允许淘汰冷 key',
+        '【长期】迁移 redis-prod-4 到独立主机，避免与其它进程争抢物理内存'
+      ],
+      grafana:[{label:'Redis 内存面板', url:'http://10.3.240.48:3000/d/redis?var-instance=hw-agent:19213'}]
+    },
+    yamlName:'redis-prod-4'
+  },
+
+  // ───────────── 场景 3: ES JVM 堆泄漏 (cluster=heimdall-es 真实) ─────────────
+  {
+    id:'es', name:'ES JVM 堆泄漏 (heimdall-es)',
+    trigger:{
+      type:'alert',
+      alertname:'ESJvmHeapHigh',
+      instance:'hw-agent:19212',
+      labels:'cluster=heimdall-es, name=es-node, host=hw-es, identifier=3, sysId=1',
+      severity:'critical',
+      source:'Alertmanager webhook',
+      startsAt:'2025-06-24 11:45:30'
+    },
+    topology:{
+      chain:[
+        {lvl:'paas', name:'es-heimdall', tag:'cluster=heimdall-es', note:'cluster 标签聚合命中 (非 instance)'},
+        {arrow:'2 节点 (identifier=3, identifier=49)'},
+        {lvl:'iaas', name:'host-es-01', tag:'ip=hw-es', note:'共用 10.3.240.48 主机'}
+      ],
+      note:'ES 用 cluster=heimdall-es 标签聚合，节点3 关键词匹配命中 es-heimdall，含 2 个节点 (identifier=3/49)。'
+    },
+    metrics:[
+      {q:'elasticsearch_jvm_memory_used_bytes\n{cluster="heimdall-es",area="heap"}', real:'776,657,056', realNote:'≈776MB', fault:'980,000,000', faultNote:'≈980MB', threshold:'接近 max'},
+      {q:'elasticsearch_jvm_memory_max_bytes\n{cluster="heimdall-es",area="heap"}', real:'1,073,741,824', realNote:'≈1GB', fault:'1,073,741,824', faultNote:'1GB', threshold:'堆上限固定'},
+      {q:'rate(elasticsearch_jvm_gc_collection_seconds_count\n{cluster="heimdall-es",gc="old"}[5m])', real:'0', realUnit:'/s', fault:'2.4', faultUnit:'/s', threshold:'频繁 Full GC', note:'gc_old rate 2.4/s 极高，老年代对象无法回收 → 堆泄漏特征。'},
+      {q:'elasticsearch_jvm_gc_collection_seconds_count\n{cluster="heimdall-es",gc="young"}', real:'44,961', fault:'58,200', threshold:'Young GC 累计飙升'},
+      {q:'elasticsearch_thread_pool_queue_size\n{cluster="heimdall-es",type="search"}', real:'无数据', realNote:'metric 不存在', fault:'870', threshold:'搜索队列堆积'},
+      {q:'elasticsearch_cluster_health_status\n{cluster="heimdall-es"}', real:'green', realNote:'=1', fault:'yellow', faultNote:'/ red', threshold:'集群健康'}
+    ],
+    logs:[
+      {src:'Loki LogQL · {cluster="heimdall-es"}', lines:[
+        {t:'err', txt:'java.lang.OutOfMemoryError: Java heap space'},
+        {t:'err', txt:'GC overhead limit exceeded'}
+      ]}
+    ],
+    case:{id:'#2024-0512', desc:'字段映射爆炸导致 heap 泄漏', score:'0.88', action:'禁用 dynamic_mapping + limit aggregation buckets'},
+    rootCause:{
+      verdict:'JVM 堆泄漏（疑似 dynamic mapping 致字段数爆炸，旧版本聚合桶未释放）',
+      neg:'',
+      reasoning:[
+        '<span class="ev-num">heap=980MB/1GB</span> 接近上限且持续上升不回落 → 内存泄漏特征',
+        '<span class="ev-num">old GC=2.4/s</span> 频繁 Full GC 但无法回收 → 老年代驻留对象',
+        '<span class="ev-num">search queue=870</span> 堆积 → 解释搜索变慢症状',
+        '日志 <span class="ev-num">OutOfMemoryError: Java heap space</span> 实锤堆溢出'
+      ]
+    },
+    report:{
+      severity:'P1 严重', confidence:88,
+      summary:'es-heimdall JVM 堆泄漏：heap 980MB/1GB 持续不回落，频繁 Full GC，搜索队列堆积 870。',
+      affected:['es-heimdall (PaaS · cluster=heimdall-es)','host-es-01 / host-es-02 (IaaS)'],
+      evidence:[
+        'jvm_heap_used: 当前 776MB → <b style="color:#b91c1c">故障 980MB</b> (max 1GB)',
+        'gc_old rate: 当前 0 → <b style="color:#b91c1c">故障 2.4/s</b> (频繁 Full GC)',
+        'search_queue: 无数据 → <b style="color:#b91c1c">故障 870</b>',
+        'cluster_health: green → <b style="color:#b91c1c">yellow/red</b>',
+        '日志: OutOfMemoryError: Java heap space / GC overhead limit exceeded',
+        '案例: #2024-0512 (相似度 0.88)'
+      ],
+      recs:[
+        '【紧急】临时重启 ES 节点释放堆（滚动重启避免分片丢失）',
+        '【短期】禁用 dynamic_mapping，显式定义 mapping 防字段爆炸',
+        '【长期】limit aggregation buckets (search.max_buckets) + 监控 heap 趋势告警'
+      ],
+      grafana:[{label:'ES JVM 面板', url:'http://10.3.240.48:3000/d/es-jvm?var-cluster=heimdall-es'}]
+    },
+    yamlName:'es-heimdall'
+  }
+];
+
+// ================================================================
+// YAML 片段 · 真实 topology.yaml (高亮 + 命中服务标记)
+// ================================================================
+function yamlMysql(){
+  return `<span class="hl-c"># topology.yaml — 基于真实 VictoriaMetrics 标签手写</span>
+<span class="hl-c"># 真实标签：instance / ip / identifier / sysId</span>
+
+<span class="hl-k">hosts</span>:                              <span class="hl-c"># IaaS 层</span>
+  <span class="hl-k">host-mysql-01</span>:
+    <span class="hl-k">ip</span>: <span class="hl-v">"10.3.240.116"</span>              <span class="hl-c"># 真实</span>
+    <span class="hl-k">node_exporter</span>: <span class="hl-v">"10.3.240.116:19100"</span>
+    <span class="hl-k">mem_total_bytes</span>: <span class="hl-v">16546467840</span>    <span class="hl-c"># ≈15.4GB（真实）</span>
+    <span class="hl-k">role</span>: <span class="hl-v">mysql</span>
+
+<span class="hl-k">services</span>:                           <span class="hl-c"># PaaS 层</span>
+<span class="svc-active">  <span class="hl-k">mysql-prod-56</span>:                    <span class="hl-c"># identifier=56 · 命中</span>
+    <span class="hl-k">layer</span>: <span class="hl-v">paas</span>
+    <span class="hl-k">type</span>: <span class="hl-v">mysql</span>
+    <span class="hl-k">instance</span>: <span class="hl-v">"10.3.240.116:19211"</span>  <span class="hl-c"># 真实</span>
+    <span class="hl-k">identifier</span>: <span class="hl-v">"56"</span>
+    <span class="hl-k">sysId</span>: <span class="hl-v">"20"</span>
+    <span class="hl-k">runs_on</span>: <span class="hl-v">host-mysql-01</span>
+    <span class="hl-k">metrics</span>:
+      <span class="hl-k">threads_running</span>:    <span class="hl-v">'mysql_global_status_threads_running{instance="10.3.240.116:19211"}'</span>
+      <span class="hl-k">slow_queries_rate</span>:  <span class="hl-v">'rate(mysql_global_status_slow_queries{instance="10.3.240.116:19211"}[5m])'</span>
+      <span class="hl-k">row_lock_waits_rate</span>:<span class="hl-v">'rate(mysql_global_status_innodb_row_lock_waits{instance="10.3.240.116:19211"}[5m])'</span>
+    <span class="hl-k">failure_modes</span>:
+      - <span class="hl-k">pattern</span>: <span class="hl-v">"slow↑ + row_lock↑ + buffer_pool_hit&gt;99%"</span>
+        <span class="hl-k">root_cause_hint</span>: <span class="hl-v">"行锁竞争（大事务/缺索引），非内存问题"</span></span>`;
+}
+function yamlRedis(){
+  return `<span class="hl-c"># topology.yaml — 基于真实 VictoriaMetrics 标签手写</span>
+
+<span class="hl-k">hosts</span>:
+  <span class="hl-k">host-redis-01</span>:
+    <span class="hl-k">ip</span>: <span class="hl-v">"10.3.240.48"</span>               <span class="hl-c"># 真实</span>
+    <span class="hl-k">node_exporter</span>: <span class="hl-v">"10.3.240.48:19011"</span>
+    <span class="hl-k">mem_total_bytes</span>: <span class="hl-v">33457881088</span>    <span class="hl-c"># ≈31.2GB（真实）</span>
+    <span class="hl-k">role</span>: <span class="hl-v">redis</span>
+
+<span class="hl-k">services</span>:
+<span class="svc-active">  <span class="hl-k">redis-prod-4</span>:                     <span class="hl-c"># identifier=4 · 命中</span>
+    <span class="hl-k">layer</span>: <span class="hl-v">paas</span>
+    <span class="hl-k">type</span>: <span class="hl-v">redis</span>
+    <span class="hl-k">instance</span>: <span class="hl-v">"hw-agent:19213"</span>      <span class="hl-c"># 真实（聚合代理上报）</span>
+    <span class="hl-k">identifier</span>: <span class="hl-v">"4"</span>
+    <span class="hl-k">sysId</span>: <span class="hl-v">"1"</span>
+    <span class="hl-k">ip_label</span>: <span class="hl-v">"hw-redis"</span>            <span class="hl-c"># 真实</span>
+    <span class="hl-k">runs_on</span>: <span class="hl-v">host-redis-01</span>
+    <span class="hl-k">maxmemory</span>: <span class="hl-w">0</span>                    <span class="hl-c"># ⚠️ 真实未设上限</span>
+    <span class="hl-k">metrics</span>:
+      <span class="hl-k">memory_used_rss</span>: <span class="hl-v">'redis_memory_used_rss_bytes{instance="hw-agent:19213"}'</span>
+      <span class="hl-k">evicted_keys</span>:    <span class="hl-v">'rate(redis_evicted_keys_total{instance="hw-agent:19213"}[5m])'</span>
+    <span class="hl-k">failure_modes</span>:
+      - <span class="hl-k">pattern</span>: <span class="hl-v">"rss 接近主机物理内存 + maxmemory=0"</span>
+        <span class="hl-k">root_cause_hint</span>: <span class="hl-v">"未设 maxmemory，RSS 触达主机内存上限被 OOM Killer 杀"</span></span>`;
+}
+function yamlEs(){
+  return `<span class="hl-c"># topology.yaml — 基于真实 VictoriaMetrics 标签手写</span>
+
+<span class="hl-k">hosts</span>:
+  <span class="hl-k">host-es-01</span>:
+    <span class="hl-k">ip</span>: <span class="hl-v">"hw-es"</span>                     <span class="hl-c"># 真实（逻辑名）</span>
+    <span class="hl-k">node_exporter</span>: <span class="hl-v">"10.3.240.48:19011"</span>  <span class="hl-c"># 共用主机</span>
+    <span class="hl-k">role</span>: <span class="hl-v">elasticsearch</span>
+
+<span class="hl-k">services</span>:
+<span class="svc-active">  <span class="hl-k">es-heimdall</span>:                      <span class="hl-c"># cluster=heimdall-es · 命中</span>
+    <span class="hl-k">layer</span>: <span class="hl-v">paas</span>
+    <span class="hl-k">type</span>: <span class="hl-v">elasticsearch</span>
+    <span class="hl-k">instance</span>: <span class="hl-v">"hw-agent:19212"</span>      <span class="hl-c"># 真实</span>
+    <span class="hl-k">cluster</span>: <span class="hl-v">"heimdall-es"</span>          <span class="hl-c"># 真实（关键索引键）</span>
+    <span class="hl-k">nodes</span>: [<span class="hl-v">es-node</span>]
+    <span class="hl-k">runs_on</span>: <span class="hl-v">host-es-01</span>
+    <span class="hl-k">metrics</span>:
+      <span class="hl-k">jvm_heap_used</span>: <span class="hl-v">'elasticsearch_jvm_memory_used_bytes{cluster="heimdall-es",area="heap"}'</span>
+      <span class="hl-k">gc_old_rate</span>:   <span class="hl-v">'rate(elasticsearch_jvm_gc_collection_seconds_count{cluster="heimdall-es",gc="old"}[5m])'</span>
+    <span class="hl-k">failure_modes</span>:
+      - <span class="hl-k">pattern</span>: <span class="hl-v">"jvm_heap_used 接近 max + gc_old 频繁"</span>
+        <span class="hl-k">root_cause_hint</span>: <span class="hl-v">"JVM 堆泄漏（字段映射/聚合桶爆炸）"</span></span>`;
+}
+
+// ================================================================
+// 渲染引擎
+// ================================================================
+let currentScene = 0;
+const YAML_FN = {mysql:yamlMysql, redis:yamlRedis, es:yamlEs};
+const STEP_NAMES = ['触发','拓扑关联','指标分析','日志分析','案例检索','根因推断','报告生成'];
+const STEP_NODES = ['节点1-2','节点3','节点4','节点5','节点6','节点6-7','节点8'];
+
+function render(){
+  const s = SCENES[currentScene];
+  document.getElementById('flowSceneName').textContent = s.name;
+  document.getElementById('flowSub').textContent = 'LangGraph 8 节点 · 展示关键 7 步';
+  document.getElementById('yamlScope').textContent = s.yamlName;
+  document.getElementById('yamlPre').innerHTML = YAML_FN[s.id]();
+
+  const steps = [
+    renderTrigger(s.trigger),
+    renderTopology(s.topology),
+    renderMetrics(s.metrics),
+    renderLogs(s.logs),
+    renderCase(s.case),
+    renderRootCause(s.rootCause),
+    renderReport(s.report)
+  ];
+  document.getElementById('flowBody').innerHTML = steps.map((body,i)=>`
+    <div class="flow-step" style="animation-delay:${i*80}ms">
+      <div class="fs-head">
+        <div class="step-num">${i+1}</div>
+        <div class="fs-title">${STEP_NAMES[i]}</div>
+        <span class="fs-node">${STEP_NODES[i]}</span>
+        <span class="fs-status"><span class="check">✓</span> 完成</span>
+      </div>
+      <div class="fs-body">${body}</div>
+    </div>
+  `).join('');
+
+  // animate confidence bar
+  setTimeout(()=>{
+    const fill = document.getElementById('confFill');
+    if(fill) fill.style.width = s.report.confidence + '%';
+  }, 600);
+}
+
+function renderTrigger(t){
+  if(t.type==='alert'){
+    return `
+      <div class="trig-row"><span class="trig-key">alertname</span><span class="trig-val">${t.alertname}</span>
+        <span class="badge badge-critical">${t.severity.toUpperCase()}</span></div>
+      <div class="trig-row"><span class="trig-key">instance</span><span class="trig-val hl-k">${t.instance}</span></div>
+      <div class="trig-row"><span class="trig-key">labels</span><span class="trig-val hl-p" style="font-family:'SF Mono',Consolas,Monaco,monospace;font-size:11px">${t.labels}</span></div>
+      <div class="trig-row"><span class="trig-key">source</span><span class="trig-val">${t.source}</span></div>
+      <div class="trig-row"><span class="trig-key">starts_at</span><span class="trig-val">${t.startsAt}</span></div>
+      <div class="topo-note" style="margin-top:8px">Webhook 接收 → 告警聚合（按 service+alertname 去重）→ 进入拓扑关联。</div>
+    `;
+  }
+  return `
+    <div class="trig-quote"><span class="who">用户：</span>${t.question}</div>
+    <div class="topo-note" style="margin-top:8px">${t.note}</div>
+  `;
+}
+
+function renderTopology(t){
+  return `
+    <div class="topo-chain">
+      ${t.chain.map(c=>{
+        if(c.arrow) return `<div class="topo-arrow">↓ ${c.arrow}</div>`;
+        return `<div class="topo-line"><span class="lvl lvl-${c.lvl}">${c.lvl}</span>
+          <b>${c.name}</b> <span class="hl-k" style="font-size:11px">${c.tag||''}</span>
+          <span style="color:var(--text-3);font-size:11px;margin-left:auto">${c.note||''}</span></div>`;
+      }).join('')}
+    </div>
+    <div class="topo-note">${t.note}</div>
+  `;
+}
+
+function renderMetrics(ms){
+  return `
+    <div class="metric-grid">
+      ${ms.map((m,i)=>`
+        <div class="metric-card" style="animation-delay:${i*60}ms">
+          <div class="m-query">${m.q.replace(/\n/g,'<br>')}</div>
+          <div class="m-dual">
+            <div class="m-real">
+              <div class="m-label">当前</div>
+              <div class="m-val">${m.real}${m.realUnit?`<span class="unit">${m.realUnit}</span>`:''}</div>
+              ${m.realNote?`<div style="font-size:9px;color:var(--text-3);margin-top:2px">${m.realNote}</div>`:''}
+            </div>
+            <div class="m-sep">→</div>
+            <div class="m-fault">
+              <div class="m-label">故障模拟</div>
+              <div class="m-val">${m.fault}${m.faultUnit?`<span class="unit">${m.faultUnit}</span>`:''}</div>
+              ${m.faultNote?`<div style="font-size:9px;color:#dc2626;margin-top:2px">${m.faultNote}</div>`:''}
+            </div>
+          </div>
+          <div class="m-threshold"><span class="th-tag">阈值</span> ${m.threshold}</div>
+        </div>
+      `).join('')}
+      ${ms.filter(m=>m.note).map(m=>`<div class="metric-note">${m.note}</div>`).join('')}
+    </div>
+  `;
+}
+
+function renderLogs(logs){
+  return logs.map(l=>`
+    <div class="log-block">
+      <span class="src">${l.src}</span>
+      ${l.lines.map(line=>`<span class="log-line ${line.t}">${escapeHtml(line.txt)}</span>`).join('')}
+    </div>
+  `).join('') + `<div style="font-size:11px;color:var(--text-3);margin-top:4px">关键词高亮：<span class="hl-e">ERROR</span> 红色，<span class="hl-w">WARN</span> 琥珀色。LogQL 标签引用真实 instance。</div>`;
+}
+
+function renderCase(c){
+  return `
+    <div class="case-hit">
+      <b>Chroma 向量检索 Top-1</b> · <span class="cid">${c.id}</span> <span class="case-score">相似度 ${c.score}</span><br>
+      <b>历史案例：</b>${c.desc}<br>
+      <b>历史处置：</b>${c.action}
+    </div>
+  `;
+}
+
+function renderRootCause(rc){
+  return `
+    <div class="rc-verdict">
+      <div class="rc-label">根因推断 · LLM 综合 (DeepSeek-V3)</div>
+      <div class="rc-text">${rc.verdict}${rc.neg?` <span class="neg">（${rc.neg}）</span>`:''}</div>
+    </div>
+    <div class="rc-evidence">
+      ${rc.reasoning.map((r,i)=>`<div><span class="ev-num">${i+1}.</span> ${r}</div>`).join('')}
+    </div>
+  `;
+}
+
+function renderReport(r){
+  return `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span class="badge badge-critical">${r.severity}</span>
+      <span class="rep-summary" style="margin:0;flex:1">${r.summary}</span>
+    </div>
+    <div class="rep-section">置信度</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="confidence-bar" style="flex:1"><div class="confidence-fill" id="confFill"></div></div>
+      <span style="font-size:13px;font-weight:600;color:var(--green)">${r.confidence}%</span>
+    </div>
+    <div class="rep-section">受影响资源</div>
+    <ul class="rep-list">${r.affected.map(a=>`<li>${a}</li>`).join('')}</ul>
+    <div class="rep-section">证据链（当前 → 故障值）</div>
+    <ul class="rep-list">${r.evidence.map(e=>`<li>${e}</li>`).join('')}</ul>
+    <div class="rep-section">处置建议</div>
+    ${r.recs.map(rec=>`<div class="rec-item">${rec}</div>`).join('')}
+    <div class="rep-section">Grafana 快照</div>
+    <div>${r.grafana.map(g=>`<a class="grafana-link" href="${g.url}">${g.label} →</a>`).join('')}</div>
+  `;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Tab 切换
+document.querySelectorAll('.scene-tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    currentScene = parseInt(tab.dataset.scene);
+    document.querySelectorAll('.scene-tab').forEach((t,i)=>t.classList.toggle('active', i===currentScene));
+    render();
+  });
+});
+
+// 初始化
+render();
+</script>
+</body>
+</html>
