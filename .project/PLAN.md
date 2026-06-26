@@ -158,3 +158,16 @@ env/去风险(D1) → 真实标签+模型+定调(D2) → FC/prom工具(D3) → l
 - **对后续影响**：D2 的 Pydantic/prompt 学习负担前移消化，D2 可聚焦真实标签核对 + 模型定义 + 定调
 
 <!-- xr: 2026-06-23 | oracle | ❌ 5项必修(加真缓冲/D2定调FC用途/定义对话工作流/核对真实Prom标签/钉死接口数) | ⚠️ 8项建议见 PLAN.xr.md — v2 已全部采纳 -->
+
+### D2+D3 · Fri 6/26 ✅（两天量一天完成，补回 D2/D3 滞后）
+- **原计划**：D2（topology+models+classify）Wed 6/24；D3（prometheus+FC）Thu 6/25
+- **实际**：D2+D3 四文件一天全完成，全部验收通过
+  - `topology.yaml`（147行）：meta + 2 hosts + 3 services（MySQL/Redis/ES）+ 5 failure_modes，真实标签手写
+  - `models.py`（192行）：4 枚举 + AlertEvent/MetricEvidence/LogEvidence/RCAReport/RCAState（Pydantic v2）
+  - `classify.py`（153行）：SYSTEM_PROMPT（四要素）+ 3 真实场景 few-shot + build_classify_prompt
+  - `prometheus.py`（72行）：query_prometheus 工程版（float+错误处理）+ TOOLS（FC schema）
+- **关键发现**：LLM FC 生成 PromQL 时 instance 数字幻觉（`10.3.240.116:19211` → `10.3.240.119211`）→ **D5 节点4 设计应从 topology.metrics 读现成 PromQL，LLM 只选指标名，不让它重新生成精确 instance**（FC 决策查什么，instance 来自 topology）
+- **真实验证**：query_prometheus 打 VictoriaMetrics 返回数值（MySQL 连接数 105 / Redis 已用内存 2093016 / host-infra 可用内存 9614249984）；FC 链路通（LLM 认得 TOOLS 并生成 tool_call）
+- **踩坑 6 个（复盘）**：YAML host 缩进变子键 / mem_total 少敲两个8 / affected_resource 少 s / `.replace("/")` 毁 URL（vs rstrip）/ `.env` 跨目录找不到（加根软链解）/ `__init__.py` 误删 ×2（git 暂存区残留）
+- **对后续影响**：D2+D3 地基就位（拓扑/模型/分类/取证四件套），跨文件契约（枚举 value / instance 值 / failure_mode_id 三方对齐）已建立；D4 直接接 loki+RAG+LangGraph 预热，无需回头补
+- **git 状态**：7 commit 待 push（含 2 fix/chore），工作区干净
